@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/xiao98/llm-recall/internal/adapter"
+	"github.com/xiao98/llm-recall/internal/config"
 	"github.com/xiao98/llm-recall/internal/index"
 	"github.com/xiao98/llm-recall/internal/stats"
 )
@@ -28,7 +29,7 @@ import (
 // Conservative — biased low so we don't over-promise.
 const tokenFallbackPerMsg = 3
 
-func cmdStats(args []string) {
+func cmdStats(args []string, cfg *config.Config) {
 	fs := flag.NewFlagSet("stats", flag.ExitOnError)
 	jsonOut := fs.Bool("json", false, "print JSON snapshot to stdout instead of TUI")
 	if err := fs.Parse(args); err != nil {
@@ -69,7 +70,7 @@ func cmdStats(args []string) {
 		os.Exit(1)
 	}
 
-	model := stats.NewModel(sessions, time.Now(), tokenFallbackPerMsg)
+	model := stats.NewModel(sessions, time.Now(), tokenFallbackPerMsg).WithPromo(cfg)
 
 	if *jsonOut {
 		if err := model.WriteJSON(os.Stdout); err != nil {

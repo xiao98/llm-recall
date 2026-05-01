@@ -32,6 +32,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/xiao98/llm-recall/internal/adapter"
+	"github.com/xiao98/llm-recall/internal/config"
+	"github.com/xiao98/llm-recall/internal/promo"
 )
 
 // TabKind picks a window for the 4×2 panel.
@@ -82,6 +84,10 @@ type Model struct {
 	width  int
 	height int
 
+	// promo is the W6 marketing config used to render the sponsored
+	// footer. nil ⇒ no footer (same as --no-promo).
+	promo *config.Config
+
 	// harness shim; nil in production. Mirrors the W3 TUI pattern.
 	harness *renderHarness
 }
@@ -100,6 +106,15 @@ func NewModel(sessions []adapter.Session, now time.Time, tokenFallback int64) *M
 	}
 	// Warm the all-time stats so the first paint is instant.
 	m.stats[TabAll] = Compute(sessions, now, TabAll.Days(), tokenFallback)
+	return m
+}
+
+// WithPromo attaches a promo config so View() renders the sponsored
+// footer. Pass nil (or a Config with NoPromo=true) to suppress the
+// footer. The setter pattern keeps the existing W5 NewModel signature
+// stable while letting cmd_stats.go opt in.
+func (m *Model) WithPromo(cfg *config.Config) *Model {
+	m.promo = cfg
 	return m
 }
 
@@ -211,6 +226,14 @@ func (m *Model) View() string {
 	b.WriteString("\n")
 	b.WriteString(colLabel.Render("  ←/→ switch window · 1/2/3 jump · q quit"))
 	b.WriteString("\n")
+	// W6: sponsored footer. promo.StatsFooter returns "" when --no-promo
+	// or when the user has set [promo] no_promo = true in config.toml,
+	// so the line collapses to nothing in that case.
+	if footer := promo.StatsFooter(m.promo); footer != "" {
+		b.WriteString("\n")
+		b.WriteString(colLabel.Render("  " + footer))
+		b.WriteString("\n")
+	}
 	return b.String()
 }
 

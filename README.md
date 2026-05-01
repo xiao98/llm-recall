@@ -2,7 +2,9 @@
 
 跨厂商 LLM CLI 会话搜索 + 恢复终端工具。一个命令找回任意 Claude Code / Codex / Gemini 历史会话并直接进入。
 
-> Sponsored by [YCAPI](https://ycapi.com)（详见 [Privacy & Promo](#privacy--promo) 段；W6 起会有 onboarding 一次同意流）
+Homepage: https://recall.youchun.tech
+
+> Sponsored by [YCAPI](https://api.youchun.tech)（详见 [Privacy & Promo](#privacy--promo) 段；W6 起会有 onboarding 一次同意流）
 
 ## Install
 

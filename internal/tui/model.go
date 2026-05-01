@@ -25,6 +25,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/xiao98/llm-recall/internal/adapter"
+	"github.com/xiao98/llm-recall/internal/config"
 	"github.com/xiao98/llm-recall/internal/search"
 )
 
@@ -47,6 +48,9 @@ type Config struct {
 	// DryRun is shown in the status bar so users know whether Enter will
 	// actually exec or just print the recipe.
 	DryRun bool
+	// Promo is the W6 marketing config. May be nil — the renderer treats
+	// nil as "no banner / no footer", same as NoPromo=true.
+	Promo *config.Config
 }
 
 // Model is the bubbletea state.

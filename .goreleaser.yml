@@ -62,7 +62,7 @@ brews:
       name: homebrew-tap
       branch: main
       token: "{{ if not .IsSnapshot }}{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}{{ end }}"
-    homepage: "https://github.com/xiao98/llm-recall"
+    homepage: "https://recall.youchun.tech"
     description: "Cross-vendor LLM CLI session search & resume TUI"
     license: "MIT"
     install: |
@@ -77,6 +77,6 @@ scoops:
       name: scoop-bucket
       branch: main
       token: "{{ if not .IsSnapshot }}{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}{{ end }}"
-    homepage: "https://github.com/xiao98/llm-recall"
+    homepage: "https://recall.youchun.tech"
     description: "Cross-vendor LLM CLI session search & resume TUI"
     license: MIT

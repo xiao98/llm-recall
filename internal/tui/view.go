@@ -8,6 +8,7 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/xiao98/llm-recall/internal/adapter"
+	"github.com/xiao98/llm-recall/internal/promo"
 )
 
 // Lipgloss styles. Single source of truth so the colour palette is easy to
@@ -74,6 +75,11 @@ func (m *Model) relayout() {
 
 // View renders the three-pane layout. Top: search box. Middle: list (left)
 // and preview (right). Bottom: status bar with key hints + result counter.
+//
+// W6 inserts an optional banner above the search bar and an optional
+// search footer between the list/preview row and the status bar.
+// Both come from internal/promo and respect the --no-promo kill switch;
+// when promo is off they are empty strings and JoinVertical drops them.
 func (m *Model) View() string {
 	if m.height == 0 || m.width == 0 {
 		return "loading…"
@@ -102,7 +108,20 @@ func (m *Model) View() string {
 
 	mid := lipgloss.JoinHorizontal(lipgloss.Top, listBox, previewBox)
 	status := m.formatStatus()
-	return lipgloss.JoinVertical(lipgloss.Left, searchBar, mid, status)
+
+	// W6 promo seams: top banner + search-footer line. Banner() / footer()
+	// return "" when --no-promo or when the random gate skips this launch,
+	// so the JoinVertical call below collapses cleanly to the W3 layout.
+	var parts []string
+	if banner := promo.Banner(m.cfg.Promo); banner != "" {
+		parts = append(parts, styleStatus.Render(banner))
+	}
+	parts = append(parts, searchBar, mid)
+	if footer := promo.SearchFooter(m.cfg.Promo, m.input.Value()); footer != "" {
+		parts = append(parts, styleStatus.Render(footer))
+	}
+	parts = append(parts, status)
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 // formatList renders the left pane: one row per result, the selected row
