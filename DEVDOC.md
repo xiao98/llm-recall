@@ -80,10 +80,31 @@ adapters → discover sessions → SQLite (id, source, cwd, mtime, title, body_f
 ## 3. P0 功能清单
 
 ### P0-1 多源 parser
-- 三家 schema 已摸清（见 `~/llm-recall/RESEARCH.md`，下个 commit 写）
-- 共同点：jsonl + 头一行 metadata（含 sessionId / cwd / startTime）
+- 三家 schema 已摸清（详见各阶段 TASKS 文档贴的 schema）
+- 共同点：jsonl + 头一行 metadata（含 sessionId / cwd / startTime）—— Gemini 旧 `.json` 单对象格式是例外
 - 用户文本提取规则各家不同（见各 adapter 注释）
 - **坑**：Codex/Gemini 文件按 mtime 增量扫；Claude 是扁平目录可全扫
+
+**已纳入官方的实测补丁**（W2 / W3 验收确认；W4 起强制遵守）：
+
+- **Gemini CWD fallback 链**：`metadata.json` > `workspace.json` > `.project_root`（纯文本文件，单行存绝对路径）> 留空。三档都失败时 title 前置 `<gemini:<projectHash 前 8 位>>` 标记。
+- **Codex 伪用户消息过滤**：跳过以 `<environment_context>` / `[Imported from Claude]` 开头的"user message"（CLI 注入上下文，非真实输入）。与 Claude `<system-reminder>` 同类。其他注入形态（如 `# AGENTS.md instructions`）留 W5+ 评估。
+- **Gemini resume 实测退化**：`gemini --resume <id>` 不接受 UUID，仅 `latest` / 整数 index。launcher 退化路径：chdir 到 cwd 后启动 `gemini` 不带 flag，stdout 追加 `→ 进入后请运行：/chat resume <sessionId>`，由用户手动续接。
+- **时间解析容忍**：统一 `parseTime`，依次尝试 RFC3339Nano / RFC3339 / .NET 7 位 fractional（`2026-04-25T10:55:00.0000000Z`），全失败再 stderr warn。
+- **adapter 可选子接口**（非破坏性扩展 §2.1）：
+
+```
+type FileLister interface { ListFiles(ctx) ([]FileMeta, error) }
+type FileParser interface {
+    ParseFile(fm FileMeta) (Session, error)
+    ParseFileFull(fm FileMeta) (Session, string, error)  // 含 body
+}
+type FileMeta struct { Path string; ModTime time.Time; Size int64 }
+```
+
+实现这两个接口的 adapter 走增量路径；不实现的走 Discover 整体扫。SessionAdapter 主接口契约不变。
+
+> **DEVDOC 修改约束**：本节及以下所有 "P0-X" 小节属于全局规约。每周 W 任务文档可引用本节，但**不得 git checkout / git revert 还原 DEVDOC**。规约的演进只能由策划方 Edit 增量；执行方发现策划方未及时更新 DEVDOC，应在验收回报里指出，不要自己回滚。
 
 ### P0-2 TUI 实时搜索
 - 输入即筛（go routine + debounce 50ms）

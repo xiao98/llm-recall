@@ -1,0 +1,82 @@
+version: 2
+
+project_name: llm-recall
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: llm-recall
+    main: ./cmd/llm-recall
+    binary: llm-recall
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: llm-recall
+    ids: [llm-recall]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE*
+      - README.md
+      - CHANGELOG.md
+
+release:
+  github:
+    owner: xiao98
+    name: llm-recall
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^Merge pull request"
+
+brews:
+  - name: llm-recall
+    repository:
+      owner: xiao98
+      name: homebrew-tap
+      branch: main
+      token: "{{ if not .IsSnapshot }}{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}{{ end }}"
+    homepage: "https://github.com/xiao98/llm-recall"
+    description: "Cross-vendor LLM CLI session search & resume TUI"
+    license: "MIT"
+    install: |
+      bin.install "llm-recall"
+    test: |
+      system "#{bin}/llm-recall version"
+
+scoops:
+  - name: llm-recall
+    repository:
+      owner: xiao98
+      name: scoop-bucket
+      branch: main
+      token: "{{ if not .IsSnapshot }}{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}{{ end }}"
+    homepage: "https://github.com/xiao98/llm-recall"
+    description: "Cross-vendor LLM CLI session search & resume TUI"
+    license: MIT
