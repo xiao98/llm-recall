@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>llm-recall — 跨厂商 LLM CLI 会话搜索 + 恢复</title>
+<meta name="description" content="fzf 风格的终端工具：一个命令在 Claude Code / Codex / Gemini CLI 三家会话历史里模糊搜索 + 直接 resume。单 Go 二进制，零依赖，无 telemetry。">
+<meta property="og:title" content="llm-recall — 跨厂商 LLM CLI 会话搜索 + 恢复">
+<meta property="og:description" content="fzf 风格的终端工具：一个命令在 Claude / Codex / Gemini CLI 三家会话历史里模糊搜索 + 直接 resume。单 Go 二进制，零依赖。">
+<meta property="og:image" content="https://recall.youchun.tech/og.png">
+<meta property="og:url" content="https://recall.youchun.tech">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://recall.youchun.tech">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>📚</text></svg>">
+<style>
+:root {
+  --bg: #0d1117;
+  --fg: #e6e6e6;
+  --muted: #6b6b6b;
+  --accent: #ff6b35;
+  --line: #21262d;
+  --code-bg: #161b22;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  font-size: clamp(14px, 1.6vw, 16px);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: clamp(24px, 6vw, 64px) clamp(16px, 4vw, 32px);
+}
+h1 {
+  font-size: clamp(28px, 5vw, 44px);
+  margin: 0 0 8px 0;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+h2 {
+  font-size: clamp(18px, 2.4vw, 22px);
+  margin: 40px 0 12px 0;
+  color: var(--fg);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+.tagline {
+  color: var(--muted);
+  margin: 0 0 28px 0;
+  font-size: clamp(15px, 2vw, 18px);
+}
+pre, code {
+  font-family: inherit;
+}
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+code { color: var(--accent); }
+pre code { color: var(--fg); }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+ul { padding-left: 20px; margin: 8px 0; }
+li { margin: 4px 0; }
+.hero pre {
+  font-size: clamp(13px, 1.6vw, 15px);
+}
+.features li strong { color: var(--accent); }
+footer {
+  margin-top: 56px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+footer a { color: var(--muted); }
+footer a:hover { color: var(--accent); }
+@media (max-width: 600px) {
+  pre { font-size: 12px; padding: 10px 12px; }
+}
+</style>
+</head>
+<body>
+<main>
+
+<section class="hero">
+  <h1>llm-recall</h1>
+  <p class="tagline">跨厂商 LLM CLI 会话搜索 + 恢复 — fzf 风格，单 Go 二进制</p>
+  <pre><code># macOS / Linux
+brew install xiao98/tap/llm-recall
+
+# Windows
+scoop bucket add xiao98 https://github.com/xiao98/scoop-bucket
+scoop install llm-recall</code></pre>
+</section>
+
+<section class="features">
+  <h2>它解决什么</h2>
+  <ul>
+    <li>同时在用 Claude Code / Codex / Gemini？三家会话散落在三处目录、三套 CLI、三个 <code>--resume</code> 语义。</li>
+    <li><strong>统一 TUI</strong>：输入即筛，多关键词 AND，中文按 unicode 字处理。</li>
+    <li><strong>回车直接 resume</strong>：自动 cd 到原 cwd，调对应 CLI（Gemini 退化交互式 <code>/chat resume</code>）。</li>
+    <li><strong>终端原生 stats / gold / card</strong>：lipgloss 渲染，截屏即传播，无 PNG 后端。</li>
+    <li><strong>BYOK</strong>：<code>gold</code> / <code>card</code> 调你自己的 LLM key，对话内容不经任何中转。</li>
+  </ul>
+</section>
+
+<section class="quick-start">
+  <h2>30 秒上手</h2>
+  <pre><code>llm-recall                    # TUI 模糊搜索（默认 dry-run）
+llm-recall stats              # GitHub 风格贡献日历 + 4×2 stats 面板
+llm-recall gold --days 7      # LLM 抽你说过的 Top 10 金句
+llm-recall card &lt;session-id&gt;  # 单会话 lipgloss 圆角名片</code></pre>
+</section>
+
+<section class="install">
+  <h2>其他安装方式</h2>
+  <pre><code># Go install (任何平台)
+go install github.com/xiao98/llm-recall/cmd/llm-recall@latest
+
+# From source
+git clone https://github.com/xiao98/llm-recall &amp;&amp; cd llm-recall
+go build -o llm-recall ./cmd/llm-recall</code></pre>
+</section>
+
+<section class="privacy">
+  <h2>隐私</h2>
+  <ul>
+    <li>本地 SQLite 索引，<strong>不上传任何对话内容</strong>。</li>
+    <li>stats 纯本地聚合，无网络出口。</li>
+    <li>gold / card BYOK：调你自己配的 LLM endpoint，调用前 5 类 PII 正则脱敏 + cost confirm + 7 天缓存。</li>
+    <li>无 telemetry，无 crash report，无"匿名统计"——一行也没有。</li>
+    <li>首次启动 onboarding 一次同意流；<code>--no-promo</code> 关全部 sponsored 痕迹。</li>
+  </ul>
+</section>
+
+<footer>
+  <a href="https://github.com/xiao98/llm-recall">GitHub</a> ·
+  <a href="https://github.com/xiao98/llm-recall/releases">Releases</a> ·
+  <a href="https://github.com/xiao98/llm-recall/blob/main/CHANGELOG.md">Changelog</a>
+  <br>
+  Sponsored by <a href="https://api.youchun.tech">YCAPI</a> · MIT License
+</footer>
+
+</main>
+</body>
+</html>
