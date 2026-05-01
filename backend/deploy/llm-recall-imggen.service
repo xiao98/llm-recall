@@ -1,0 +1,23 @@
+[Unit]
+Description=llm-recall image generation backend
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/llm-recall/backend
+ExecStart=%h/llm-recall/backend/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8001 --workers 1
+Restart=on-failure
+RestartSec=5
+
+# Resource limits for the 1G / 1C RackNerd box where Gemini cookie pool
+# also lives. Hitting these caps the service rather than evicting other
+# processes; the renderer is dispensable, the cookie pool is not.
+MemoryMax=300M
+CPUQuota=50%
+
+# Security: minimal hardening that doesn't break Pillow/font reading.
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

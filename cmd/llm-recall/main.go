@@ -31,6 +31,7 @@ const version = "0.0.1-dev"
 // nothing) goes to the TUI command, which is the W3 default.
 var knownSubcommands = map[string]struct{}{
 	"ls":      {},
+	"stats":   {},
 	"version": {},
 	"help":    {},
 }
@@ -44,6 +45,8 @@ func main() {
 	switch first {
 	case "ls":
 		cmdLs(os.Args[2:])
+	case "stats":
+		cmdStats(os.Args[2:])
 	case "version", "-v", "--version":
 		fmt.Println("llm-recall", version)
 	case "help", "-h", "--help":
@@ -61,12 +64,14 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: llm-recall [tui-flags] | ls [...] | version")
+	fmt.Fprintln(os.Stderr, "usage: llm-recall [tui-flags] | ls [...] | stats [...] | version")
 	fmt.Fprintln(os.Stderr, "  (no args)             open TUI search (dry-run by default)")
 	fmt.Fprintln(os.Stderr, "  --no-dry-run          really exec the resume recipe on Enter")
 	fmt.Fprintln(os.Stderr, "  --source <name>       limit to one adapter")
 	fmt.Fprintln(os.Stderr, "  ls [-n N] [--all] [--no-cache] [--source claude|codex|gemini]")
 	fmt.Fprintln(os.Stderr, "                        list LLM CLI sessions on this machine")
+	fmt.Fprintln(os.Stderr, "  stats [--days N] [--backend URL] [--template v1|v2|v3] [--no-watermark] [--no-open]")
+	fmt.Fprintln(os.Stderr, "                        render two PNG stats cards into ~/Pictures/llm-recall/")
 	fmt.Fprintln(os.Stderr, "  version               print version")
 }
 
