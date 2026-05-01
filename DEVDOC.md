@@ -147,24 +147,35 @@ type FileMeta struct { Path string; ModTime time.Time; Size int64 }
 - 关键词从用户当前 query 取
 - 实现：在 TUI list footer slot 渲染
 
-### P0-8 一键出图（取代 share）
+### P0-8 一键出卡 `llm-recall card <session-id>`
 
-> ⚠️ **W5 pivot 后待重新评估**：终端原生路线 vs Go 本地 PNG 渲染（如 fogleman/gg） vs 重启 Pillow 后端。W7 写 P0-9 任务文档前由策划方拍板。下面是原 spec，仅供参考。
+**W7 落实**：终端原生 lipgloss 圆角卡片，BYOK，截屏即传播（与 W5 stats 路线一致，单二进制零外部依赖）。
 
-- 在搜索结果上选中后按 `s` → `llm-recall card <session-id>`
-- 内容：会话脱敏摘要（首条 user msg + LLM 1 句话总结，BYOK 调）
-- 同样调 Scaleway 后端 → 出图 → 落盘
-- 提示用户：「Saved to <path>. 截图发朋友圈/即刻吧」（不做 share 后端）
+- 输出：lipgloss 圆角边框卡片
+  - 标题行：`session <id8> · <source> · <time>`
+  - body 引用（首条用户消息截 200 字）
+  - "在做：" + LLM 一句话总结（≤ 50 字符）
+  - cwd 行
+  - footer（受 `--no-promo` 统一开关控制）
+- BYOK：env `ANTHROPIC_API_KEY` 优先 → `OPENAI_API_KEY` 兜底；可 config.toml `[llm]` 自定义 vendor / model / base_url
+- 默认走官方 endpoint；用户中转用 `--llm-base-url` 或 config.toml
+- 调 LLM 前 PII 脱敏（5 类正则：API key / OAuth token / email / 手机 / IPv4） + token/cost 估算 confirm（`-y` 跳过）
+- LLM 结果落 `~/.cache/llm-recall/llm-cache/`，7 天 TTL，`--no-cache` 强刷
 
 ### P0-9 金句挖掘 `llm-recall gold`
 
-> ⚠️ **W5 pivot 后待重新评估输出形态**：终端长格式 markdown / 终端 ASCII 卡片 / Go 本地 PNG / Pillow 后端长图。W7 任务文档前拍板。下面是原 spec，仅供参考。
+**W7 落实**：终端原生 lipgloss Top 10 列表 + 单次 LLM 调用，BYOK，截屏即传播。
 
-- 扫 7 天会话（默认窗口可配置）
-- BYOK：自动探测 `ANTHROPIC_API_KEY` 或 `OPENAI_API_KEY`，没有就报错引导配置
-- 调 LLM 抽 Top 10 用户金句（prompt 模板见 `internal/llm/gold_prompt.go`）
-- 输出长图（Scaleway 后端模板 `gold-list`）
-- 默认水印开
+- 默认扫 7 天会话（`--days N` 覆盖）
+- 单次 LLM 调用：每会话 body 取首 1KB（utf-8 安全截断） → 拼接 → LLM 抽 Top 10 用户金句 + 一句话点评（JSON 输出，解析失败 retry once with stricter system prompt）
+- 总文本超 100KB（约 25K token）→ 自动 sample 50 会话
+- BYOK / config / flag / env 优先级链同 P0-8
+- 输出形态：
+  - **默认**：lipgloss 圆角边框 + 编号 + quote 高亮 + comment 灰色（终端截屏分享）
+  - `--md`：纯 markdown 列表（无颜色无边框，pipe 友好，自动化场景）
+- footer 受 `--no-promo` 控制
+- PII 脱敏 + token/cost confirm + 7d cache 同 P0-8
+- prompt 模板见 `internal/llm/prompts/gold.go`；质量敏感任务可升级模型：`--model claude-sonnet-4-6` / `--model gpt-4o`
 
 ## 4. 隐私 + 透明度（防被骂指南）
 
