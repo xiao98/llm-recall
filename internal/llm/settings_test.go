@@ -1,11 +1,24 @@
 package llm
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/xiao98/llm-recall/internal/config"
+	"github.com/xiao98/llm-recall/internal/credentials"
 )
+
+// isolateCreds points credentials.CredPathOverride at a non-existent path
+// inside t.TempDir() for the duration of the test. Without this, a real
+// credentials.toml on the dev machine (e.g. left over from manual `llm-recall
+// login` testing) would satisfy Resolve()'s priority chain and break tests
+// that assert the no-key error path.
+func isolateCreds(t *testing.T) {
+	t.Helper()
+	credentials.CredPathOverride = filepath.Join(t.TempDir(), "creds.toml")
+	t.Cleanup(func() { credentials.CredPathOverride = "" })
+}
 
 func TestResolveFlagPrecedence(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-fromenv")
@@ -61,6 +74,7 @@ func TestResolveConfigBeatsDefaults(t *testing.T) {
 }
 
 func TestResolveNoKey(t *testing.T) {
+	isolateCreds(t)
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("OPENAI_API_KEY", "")
 	t.Setenv("LLM_RECALL_LLM_MOCK", "")
@@ -74,6 +88,7 @@ func TestResolveNoKey(t *testing.T) {
 }
 
 func TestResolveMockModeNoKey(t *testing.T) {
+	isolateCreds(t)
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("OPENAI_API_KEY", "")
 	t.Setenv("LLM_RECALL_LLM_MOCK", "1")
