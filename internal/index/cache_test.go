@@ -21,7 +21,7 @@ func mkSession(src, id string, cwd string, t time.Time, fp string, title string)
 }
 
 // TestCache_UpsertGetDelete walks the four operations the discover layer
-// relies on: Upsert, GetByPath hit, GetByPath miss, DeleteByPaths.
+// relies on: Upsert (with body), GetByPath hit, GetByPath miss, DeleteByPaths.
 func TestCache_UpsertGetDelete(t *testing.T) {
 	dir := t.TempDir()
 	c, err := OpenCache(filepath.Join(dir, "x.db"))
@@ -36,12 +36,11 @@ func TestCache_UpsertGetDelete(t *testing.T) {
 	cc := mkSession("gemini", "id-c", "/cwd/c", now, "/p/c.jsonl", "ttl-c")
 
 	for _, s := range []adapter.Session{a, b, cc} {
-		if err := c.Upsert(s, now.Unix(), 100); err != nil {
+		if err := c.Upsert(s, "body-"+s.ID, now.Unix(), 100); err != nil {
 			t.Fatalf("Upsert %s: %v", s.ID, err)
 		}
 	}
 
-	// Hit (exact mtime/size match).
 	got, fmtime, fsize, hit, err := c.GetByPath("claude", "/p/a.jsonl")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -49,7 +48,9 @@ func TestCache_UpsertGetDelete(t *testing.T) {
 	if !hit || got.Title != "ttl-a" || fmtime != now.Unix() || fsize != 100 {
 		t.Errorf("Get hit: %+v %d %d %v", got, fmtime, fsize, hit)
 	}
-	// Miss.
+	if got.Body != "body-id-a" {
+		t.Errorf("body not roundtripped: got %q", got.Body)
+	}
 	_, _, _, hit, err = c.GetByPath("claude", "/no/such")
 	if err != nil {
 		t.Fatalf("Get miss: %v", err)
@@ -61,7 +62,7 @@ func TestCache_UpsertGetDelete(t *testing.T) {
 
 // TestCache_UpsertOverwritesOnMtimeChange simulates the increment path:
 // initial parse, file mtime bumps, re-parse with new title — the cache row
-// must reflect the latest values.
+// must reflect the latest values (including body).
 func TestCache_UpsertOverwritesOnMtimeChange(t *testing.T) {
 	dir := t.TempDir()
 	c, err := OpenCache(filepath.Join(dir, "x.db"))
@@ -72,14 +73,14 @@ func TestCache_UpsertOverwritesOnMtimeChange(t *testing.T) {
 
 	t1 := time.Unix(1700000000, 0)
 	s := mkSession("claude", "sid", "/cwd", t1, "/p/x.jsonl", "v1")
-	if err := c.Upsert(s, t1.Unix(), 10); err != nil {
+	if err := c.Upsert(s, "body-v1", t1.Unix(), 10); err != nil {
 		t.Fatal(err)
 	}
 
 	t2 := time.Unix(1700001000, 0)
 	s.UpdatedAt = t2
 	s.Title = "v2"
-	if err := c.Upsert(s, t2.Unix(), 20); err != nil {
+	if err := c.Upsert(s, "body-v2", t2.Unix(), 20); err != nil {
 		t.Fatal(err)
 	}
 
@@ -89,6 +90,9 @@ func TestCache_UpsertOverwritesOnMtimeChange(t *testing.T) {
 	}
 	if got.Title != "v2" {
 		t.Errorf("title not overwritten: %q", got.Title)
+	}
+	if got.Body != "body-v2" {
+		t.Errorf("body not overwritten: %q", got.Body)
 	}
 	if fmtime != t2.Unix() || fsize != 20 {
 		t.Errorf("mtime/size not overwritten: %d %d", fmtime, fsize)
@@ -107,7 +111,7 @@ func TestCache_StaleSweep(t *testing.T) {
 
 	now := time.Unix(1700000000, 0)
 	for _, p := range []string{"/p/1", "/p/2", "/p/3"} {
-		if err := c.Upsert(mkSession("claude", p, "", now, p, "t"), now.Unix(), 1); err != nil {
+		if err := c.Upsert(mkSession("claude", p, "", now, p, "t"), "", now.Unix(), 1); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -146,10 +150,9 @@ func TestCache_BatchUpsert(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Unix(1700000000, 0)
-	for i, p := range []string{"/p/a", "/p/b", "/p/c"} {
+	for _, p := range []string{"/p/a", "/p/b", "/p/c"} {
 		s := mkSession("codex", p, "", now, p, "t")
-		_ = i
-		if err := batch.Upsert(s, now.Unix(), int64(len(p))); err != nil {
+		if err := batch.Upsert(s, "body-"+p, now.Unix(), int64(len(p))); err != nil {
 			t.Fatalf("batch upsert: %v", err)
 		}
 	}
@@ -162,5 +165,23 @@ func TestCache_BatchUpsert(t *testing.T) {
 	}
 	if len(all) != 3 {
 		t.Errorf("want 3, got %d", len(all))
+	}
+}
+
+// TestCache_SchemaVersion checks that OpenCache leaves the schema_version
+// table at CurrentSchemaVersion. Verifies the W3 v2 migration ran.
+func TestCache_SchemaVersion(t *testing.T) {
+	dir := t.TempDir()
+	c, err := OpenCache(filepath.Join(dir, "x.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	v, err := c.Version()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != CurrentSchemaVersion {
+		t.Errorf("schema_version: want %d, got %d", CurrentSchemaVersion, v)
 	}
 }

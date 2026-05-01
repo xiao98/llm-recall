@@ -29,6 +29,14 @@ type FileParser interface {
 	ParseFile(path string) (Session, error)
 }
 
+// FileBodyParser is an optional capability for adapters that can extract the
+// concatenated user-message body in one pass. The TUI preview pane consumes
+// this; `ls` does not. Adapters that don't implement it cause discover to
+// fall back to ParseFile (Body left empty).
+type FileBodyParser interface {
+	ParseFileFull(path string) (Session, string, error)
+}
+
 // listFilesGeneric walks `root` and yields every entry that satisfies `match`.
 // Returns nil (no error) when root is missing — callers treat that as "vendor
 // not installed".

@@ -85,7 +85,7 @@ func (c *Claude) Discover(ctx context.Context) ([]Session, error) {
 				continue
 			}
 			path := filepath.Join(projectPath, e.Name())
-			s, err := parseClaudeSessionFile(path)
+			s, _, err := scanClaudeSessionFile(path, false)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "warn: claude parse %s: %v\n", path, err)
 				continue
@@ -103,16 +103,29 @@ func (c *Claude) Read(s Session) ([]Message, error) {
 	return nil, errors.New("claude adapter: Read not implemented in W1")
 }
 
-// ResumeCommand returns the canonical `claude --resume <id>` invocation and
-// the cwd captured for the session. The launcher (W3) consumes this verbatim.
-func (c *Claude) ResumeCommand(s Session) ([]string, string) {
-	return []string{"claude", "--resume", s.ID}, s.CWD
+// ResumeCommand returns the canonical `claude --resume <id>` invocation. The
+// claude CLI accepts a session UUID directly via -r/--resume (audited W3
+// §0.4 against claude --help); ResumeDirect mode means the launcher just
+// chdirs to cwd and exec's.
+func (c *Claude) ResumeCommand(s Session) ([]string, string, ResumeMode, error) {
+	if s.ID == "" {
+		return nil, s.CWD, ResumeUnsupported, fmt.Errorf("claude: no session id")
+	}
+	return []string{"claude", "--resume", s.ID}, s.CWD, ResumeDirect, nil
 }
 
 // ParseFile is the FileParser capability — single-file parse for the cache
-// miss path. Discover()'s loop body uses the same helper.
+// miss path that only needs metadata (id/cwd/title/started). Discover()'s
+// loop body uses the same helper.
 func (c *Claude) ParseFile(path string) (Session, error) {
-	return parseClaudeSessionFile(path)
+	s, _, err := scanClaudeSessionFile(path, false)
+	return s, err
+}
+
+// ParseFileFull is the FileBodyParser path: scan the full file and return
+// (session, body). The TUI uses this on cache miss / forced rescan.
+func (c *Claude) ParseFileFull(path string) (Session, string, error) {
+	return scanClaudeSessionFile(path, true)
 }
 
 // claudeRecord is a permissive view of one jsonl row. Only the fields we
@@ -130,23 +143,29 @@ type claudeMessage struct {
 	Content json.RawMessage `json:"content"`
 }
 
-// parseClaudeSessionFile streams the jsonl and returns as soon as it has
-// (sessionId, cwd, first-real-user-msg, first-timestamp). It never reads
-// the whole file into memory.
-func parseClaudeSessionFile(path string) (Session, error) {
+const claudeBodyMaxBytes = 65536
+
+// scanClaudeSessionFile is the unified scanner. When collectBody=false it
+// fast-exits as soon as (id, cwd, title, started) are known, matching W1's
+// O(first-few-rows) cost. When collectBody=true it runs to EOF, joining every
+// real (non-injected) user message with "\n---\n" and clamping at 64KB.
+//
+// Single helper guards against the Title-extraction logic and Body-extraction
+// logic drifting apart.
+func scanClaudeSessionFile(path string, collectBody bool) (Session, string, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
-		return Session{}, err
+		return Session{}, "", err
 	}
 
 	id := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	if id == "" {
-		return Session{}, fmt.Errorf("empty session id from filename")
+		return Session{}, "", fmt.Errorf("empty session id from filename")
 	}
 
 	f, err := os.Open(path)
 	if err != nil {
-		return Session{}, err
+		return Session{}, "", err
 	}
 	defer f.Close()
 
@@ -158,6 +177,7 @@ func parseClaudeSessionFile(path string) (Session, error) {
 		cwd     string
 		title   string
 		started time.Time
+		body    strings.Builder
 	)
 
 	for sc.Scan() {
@@ -174,28 +194,43 @@ func parseClaudeSessionFile(path string) (Session, error) {
 			cwd = rec.CWD
 		}
 		if started.IsZero() && rec.Timestamp != "" {
-			if t, err := time.Parse(time.RFC3339Nano, rec.Timestamp); err == nil {
+			if t, err := ParseTime(rec.Timestamp); err == nil {
 				started = t
 			}
 		}
-		if title == "" && rec.Type == "user" && rec.Message != nil {
-			if text, ok := extractUserText(rec.Message.Content); ok {
-				title = CleanTitle(text)
+		if rec.Type == "user" && rec.Message != nil {
+			text, ok := extractUserText(rec.Message.Content)
+			if ok {
+				if title == "" {
+					title = CleanTitle(text)
+				}
+				if collectBody {
+					if body.Len() > 0 {
+						body.WriteString("\n---\n")
+					}
+					body.WriteString(text)
+				}
 			}
 		}
-		if cwd != "" && title != "" && !started.IsZero() {
+		// Fast-exit only when body is not needed.
+		if !collectBody && cwd != "" && title != "" && !started.IsZero() {
 			break
 		}
 	}
 	if err := sc.Err(); err != nil {
 		// Even on read error, surface what we have if it's enough.
 		if cwd == "" {
-			return Session{}, err
+			return Session{}, "", err
 		}
 	}
 
 	if cwd == "" {
-		return Session{}, fmt.Errorf("no cwd field found in %s", filepath.Base(path))
+		return Session{}, "", fmt.Errorf("no cwd field found in %s", filepath.Base(path))
+	}
+
+	finalBody := ""
+	if collectBody {
+		finalBody = SafeUTF8Truncate(body.String(), claudeBodyMaxBytes)
 	}
 
 	return Session{
@@ -206,7 +241,7 @@ func parseClaudeSessionFile(path string) (Session, error) {
 		UpdatedAt: fi.ModTime(),
 		FilePath:  path,
 		Title:     title,
-	}, nil
+	}, finalBody, nil
 }
 
 // extractUserText pulls the displayable user text from a Claude `message.content`

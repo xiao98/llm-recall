@@ -4,6 +4,11 @@
 // rebuild the Session from cached columns without touching disk; on a miss
 // we re-parse. Even when --no-cache is set we still WRITE to the cache so
 // the next run is fast — TASKS-W2.md §5 explicitly demands this.
+//
+// W3 introduces the NeedBody option for the TUI preview pane: when set, the
+// discover layer ensures every returned Session has its Body field populated.
+// On a v2 schema upgrade the existing rows have `body=""`; we treat those as
+// half-hits and run ParseFileFull once to backfill.
 package index
 
 import (
@@ -23,8 +28,9 @@ var Adapters = []adapter.SessionAdapter{
 	adapter.NewGemini(),
 }
 
-// Options tunes DiscoverAll. Zero value (UseCache=false, Source="") behaves
-// like "scan everything fresh, return all adapters".
+// Options tunes DiscoverAll. Zero value (UseCache=false, Source="",
+// NeedBody=false) behaves like W2 ls: scan everything fresh, return all
+// adapters, no body extraction.
 type Options struct {
 	// UseCache controls cache READ. When true and an adapter implements
 	// FileLister + FileParser, we skip parsing files whose (mtime, size)
@@ -34,6 +40,13 @@ type Options struct {
 
 	// Source filters to a single adapter by Name(). Empty == all.
 	Source string
+
+	// NeedBody asks the discover layer to guarantee that every returned
+	// Session has its Body field populated. Cache hits with empty body
+	// (e.g. fresh schema-v2 upgrade where the column exists but every row
+	// holds "") trigger a one-time ParseFileFull rescan. The TUI sets this;
+	// `ls` does not.
+	NeedBody bool
 }
 
 // DiscoverAll fans out to every registered adapter, collects sessions, and
@@ -66,7 +79,7 @@ func DiscoverAll(ctx context.Context, opt Options) ([]adapter.Session, error) {
 			return all, ctx.Err()
 		default:
 		}
-		sessions, err := discoverOne(ctx, a, cache, opt.UseCache)
+		sessions, err := discoverOne(ctx, a, cache, opt.UseCache, opt.NeedBody)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warn: adapter %s discover: %v\n", a.Name(), err)
 			continue
@@ -81,15 +94,20 @@ func DiscoverAll(ctx context.Context, opt Options) ([]adapter.Session, error) {
 
 // discoverOne handles one adapter with optional caching.
 //
-//   - When the adapter implements both FileLister and FileParser, we go through
-//     the cache path: list files, ask cache for a hit per file, parse on miss,
+//   - When the adapter implements FileLister + FileParser we go through the
+//     cache path: list files, ask cache for a hit per file, parse on miss,
 //     upsert all results in one transaction, sweep stale rows.
-//   - Otherwise we fall back to the adapter's own Discover() and just upsert
-//     whatever it returned. This keeps us forward-compatible with adapters
-//     that have a non-file storage model.
-func discoverOne(ctx context.Context, a adapter.SessionAdapter, cache *Cache, useCacheRead bool) ([]adapter.Session, error) {
+//   - Otherwise we fall back to the adapter's own Discover() and return what
+//     it gives us (no body, no upsert).
+//
+// `needBody` makes the cache hit conditional on Body being non-empty: the v2
+// migration leaves all existing rows with body="" until one rescan repopulates
+// them. Without this guard, the TUI preview pane would be blank forever after
+// upgrade.
+func discoverOne(ctx context.Context, a adapter.SessionAdapter, cache *Cache, useCacheRead, needBody bool) ([]adapter.Session, error) {
 	lister, lok := a.(adapter.FileLister)
 	parser, pok := a.(adapter.FileParser)
+	bodyParser, bok := a.(adapter.FileBodyParser)
 	if cache == nil || !lok || !pok {
 		// No cache available or adapter doesn't expose granular hooks: just
 		// call Discover() directly.
@@ -124,19 +142,32 @@ func discoverOne(ctx context.Context, a adapter.SessionAdapter, cache *Cache, us
 
 		if useCacheRead {
 			if s, fmtime, fsize, hit, err := cache.GetByPath(a.Name(), f.Path); err == nil && hit {
-				if fmtime == f.Mtime && fsize == f.Size {
+				bodyOK := !needBody || s.Body != ""
+				if fmtime == f.Mtime && fsize == f.Size && bodyOK {
 					out = append(out, *s)
 					continue
 				}
 			}
 		}
-		// Miss (or cache-read disabled): re-parse and upsert.
-		s, err := parser.ParseFile(f.Path)
+		// Miss (or cache-read disabled, or body backfill needed): parse and upsert.
+		// Use ParseFileFull when the caller asked for bodies AND the adapter
+		// supports the optional FileBodyParser; otherwise fall back to the
+		// title-only ParseFile so callers like `ls` stay fast.
+		var (
+			s    adapter.Session
+			body string
+		)
+		if needBody && bok {
+			s, body, err = bodyParser.ParseFileFull(f.Path)
+		} else {
+			s, err = parser.ParseFile(f.Path)
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warn: %s parse %s: %v\n", a.Name(), f.Path, err)
 			continue
 		}
-		if err := batch.Upsert(s, f.Mtime, f.Size); err != nil {
+		s.Body = body
+		if err := batch.Upsert(s, body, f.Mtime, f.Size); err != nil {
 			fmt.Fprintf(os.Stderr, "warn: %s upsert %s: %v\n", a.Name(), f.Path, err)
 		}
 		out = append(out, s)

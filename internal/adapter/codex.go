@@ -78,7 +78,7 @@ func (c *Codex) Discover(ctx context.Context) ([]Session, error) {
 		if !strings.HasPrefix(name, "rollout-") || filepath.Ext(name) != ".jsonl" {
 			return nil
 		}
-		s, perr := parseCodexSessionFile(path)
+		s, _, perr := scanCodexSessionFile(path, false)
 		if perr != nil {
 			fmt.Fprintf(os.Stderr, "warn: codex parse %s: %v\n", path, perr)
 			return nil
@@ -96,15 +96,29 @@ func (c *Codex) Read(s Session) ([]Message, error) {
 	return nil, errors.New("codex adapter: Read not implemented in W2")
 }
 
-// ResumeCommand returns the canonical `codex resume <id>` shape. Codex CLI's
-// actual resume flag varies across versions, but the launcher (W3) will
-// finalise; for now the recipe matches `codex --help`'s `resume` subcommand.
-func (c *Codex) ResumeCommand(s Session) ([]string, string) {
-	return []string{"codex", "resume", s.ID}, s.CWD
+// ResumeCommand returns the canonical `codex resume <id>` shape — the codex
+// CLI exposes a `resume` subcommand that accepts a session UUID positional.
+// W3 §0.4 audit confirmed (codex 0.128.0).
+func (c *Codex) ResumeCommand(s Session) ([]string, string, ResumeMode, error) {
+	if s.ID == "" {
+		return nil, s.CWD, ResumeUnsupported, fmt.Errorf("codex: no session id")
+	}
+	return []string{"codex", "resume", s.ID}, s.CWD, ResumeDirect, nil
 }
 
+// ParseFile parses just enough of a rollout file to fill (id, cwd, started,
+// title). The body field is left empty — callers that need it must use
+// ParseFileFull, which streams the full file.
 func (c *Codex) ParseFile(path string) (Session, error) {
-	return parseCodexSessionFile(path)
+	s, _, err := scanCodexSessionFile(path, false)
+	return s, err
+}
+
+// ParseFileFull is the FileBodyParser path: it scans the entire rollout and
+// returns the concatenated user message body in addition to the session
+// metadata. Used by the TUI on cache miss.
+func (c *Codex) ParseFileFull(path string) (Session, string, error) {
+	return scanCodexSessionFile(path, true)
 }
 
 type codexLine struct {
@@ -134,18 +148,27 @@ type codexResponseContent struct {
 // Used as a fallback session id when session_meta is missing.
 var rolloutUUIDRe = regexp.MustCompile(`-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$`)
 
-// parseCodexSessionFile streams a codex rollout jsonl and returns once it has
-// (sessionId, cwd, startedAt, title). Lines can be very large (reasoning
-// payloads), so the scanner buffer is 8MB like Claude's.
-func parseCodexSessionFile(path string) (Session, error) {
+// scanCodexSessionFile is the shared scanner for both ParseFile (title-only,
+// fast-exit) and ParseFileFull (run to EOF, accumulate body). Lines can be
+// very large (reasoning payloads), so the scanner buffer is 8MB like Claude's.
+//
+// Body collection rules (only when collectBody=true):
+//   - only `response_item` rows where payload.type=="message" && role=="user"
+//   - skip codex pseudo-user messages (env_context / [Imported from Claude])
+//   - join the user texts of all `input_text` parts of one message with " "
+//   - separate messages with "\n---\n"
+//   - clamp to 65536 bytes via SafeUTF8Truncate at the end
+const codexBodyMaxBytes = 65536
+
+func scanCodexSessionFile(path string, collectBody bool) (Session, string, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
-		return Session{}, err
+		return Session{}, "", err
 	}
 
 	f, err := os.Open(path)
 	if err != nil {
-		return Session{}, err
+		return Session{}, "", err
 	}
 	defer f.Close()
 
@@ -157,6 +180,7 @@ func parseCodexSessionFile(path string) (Session, error) {
 		cwd     string
 		started time.Time
 		title   string
+		body    strings.Builder
 	)
 
 	for sc.Scan() {
@@ -183,19 +207,19 @@ func parseCodexSessionFile(path string) (Session, error) {
 					if ts == "" {
 						ts = hdr.Timestamp
 					}
-					if t, err := parseCodexTime(ts); err == nil {
+					if t, err := ParseTime(ts); err == nil {
 						started = t
 					}
 				}
 			}
 		case "response_item":
-			if title != "" {
-				continue
-			}
 			var item codexResponseItem
 			if err := json.Unmarshal(hdr.Payload, &item); err != nil {
 				continue
 			}
+			// We only ever care about real user messages here. function_call,
+			// function_call_output, reasoning, local_shell_call, tool_search_call
+			// all parse with item.Type != "message" and fall through.
 			if item.Type != "message" || item.Role != "user" {
 				continue
 			}
@@ -208,17 +232,32 @@ func parseCodexSessionFile(path string) (Session, error) {
 					b.WriteString(c.Text)
 				}
 			}
-			t := CleanTitle(b.String())
-			if t != "" {
-				title = t
+			text := b.String()
+			if text == "" {
+				continue
+			}
+			// Skip CLI-synthesised pseudo-user payloads (env_context / import marker).
+			if IsCodexInjectedUserText(text) {
+				continue
+			}
+			cleaned := CleanTitle(text)
+			if title == "" && cleaned != "" {
+				title = cleaned
+			}
+			if collectBody {
+				if body.Len() > 0 {
+					body.WriteString("\n---\n")
+				}
+				body.WriteString(text)
 			}
 		}
-		if id != "" && cwd != "" && !started.IsZero() && title != "" {
+		// Fast-exit only when we don't need a body.
+		if !collectBody && id != "" && cwd != "" && !started.IsZero() && title != "" {
 			break
 		}
 	}
 	if err := sc.Err(); err != nil {
-		// Scan errors are tolerable as long as we got an id.
+		// Tolerate read errors as long as we got an id.
 		if id == "" {
 			// Fall through to filename fallback below.
 		}
@@ -229,8 +268,13 @@ func parseCodexSessionFile(path string) (Session, error) {
 			id = m[1]
 			fmt.Fprintf(os.Stderr, "warn: codex %s: session_meta missing, using filename uuid\n", filepath.Base(path))
 		} else {
-			return Session{}, fmt.Errorf("no session id in %s", filepath.Base(path))
+			return Session{}, "", fmt.Errorf("no session id in %s", filepath.Base(path))
 		}
+	}
+
+	finalBody := ""
+	if collectBody {
+		finalBody = SafeUTF8Truncate(body.String(), codexBodyMaxBytes)
 	}
 
 	return Session{
@@ -241,17 +285,5 @@ func parseCodexSessionFile(path string) (Session, error) {
 		UpdatedAt: fi.ModTime(),
 		FilePath:  path,
 		Title:     title,
-	}, nil
-}
-
-// parseCodexTime accepts both RFC3339Nano and the .NET-style 7-digit
-// fractional seconds we see in rollouts on Windows ("2026-04-25T10:55:00.0000000Z").
-func parseCodexTime(s string) (time.Time, error) {
-	if s == "" {
-		return time.Time{}, fmt.Errorf("empty timestamp")
-	}
-	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
-		return t, nil
-	}
-	return time.Parse(time.RFC3339, s)
+	}, finalBody, nil
 }
