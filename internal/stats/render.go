@@ -25,11 +25,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	xterm "github.com/charmbracelet/x/term"
 
 	"github.com/xiao98/llm-recall/internal/adapter"
 	"github.com/xiao98/llm-recall/internal/config"
@@ -210,6 +212,26 @@ func colourFor(l HeatLevel) lipgloss.Color {
 	}
 }
 
+// effectiveWidth returns the column count to lay out against. Order of
+// preference: LLM_RECALL_TEST_TERM_WIDTH env (test-only override) →
+// WindowSizeMsg → real terminal via x/term → 80 fallback. The env wins
+// over WindowSizeMsg so the harness can drive width without a real PTY
+// even when stdout is attached to a real terminal.
+func (m *Model) effectiveWidth() int {
+	if v := os.Getenv("LLM_RECALL_TEST_TERM_WIDTH"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	if m.width > 0 {
+		return m.width
+	}
+	if w, _, err := xterm.GetSize(os.Stdout.Fd()); err == nil && w > 0 {
+		return w
+	}
+	return 80
+}
+
 // View renders the full screen.
 func (m *Model) View() string {
 	var b strings.Builder
@@ -237,10 +259,17 @@ func (m *Model) View() string {
 	return b.String()
 }
 
-// viewHeatmap draws month axis + 7 weekday rows.
+// viewHeatmap draws month axis + 7 weekday rows. When the terminal is too
+// narrow to fit a meaningful heatmap (≤6 gutter + at least ~52 weeks worth
+// of cells) we degrade to a one-line warning so the panel below still
+// renders.
 func (m *Model) viewHeatmap() string {
 	if m.heatmap.Cols == 0 {
 		return colLabel.Render("  (no sessions yet — run a few then come back)")
+	}
+	w := m.effectiveWidth()
+	if w < 60 {
+		return colLabel.Render(fmt.Sprintf("  ⚠ heatmap 需 ≥ 60 列宽，当前 %d；已隐藏", w))
 	}
 
 	// Month axis: align labels to their column positions. Each cell is 1
@@ -366,13 +395,27 @@ func (m *Model) viewPanel() string {
 		}
 	}
 
+	// Width-aware degrade: <80 columns is too narrow for two label-value
+	// columns side-by-side, so we stack vertically as 4×1 (8 lines tall
+	// instead of 4) — same data, just reflowed.
+	w := m.effectiveWidth()
+	stack := w < 80
+
 	var b strings.Builder
 	for _, r := range rows {
-		// Column 1: "label: value" left-aligned in a fixed width.
 		col1 := fmt.Sprintf("%s %s",
 			colLabel.Render(padRight(r[0][0]+":", labelW1+1)),
 			colValue.Render(r[0][1]),
 		)
+		if stack {
+			col2 := fmt.Sprintf("%s %s",
+				colLabel.Render(padRight(r[1][0]+":", labelW2+1)),
+				colValue.Render(r[1][1]),
+			)
+			b.WriteString("  " + col1 + "\n")
+			b.WriteString("  " + col2 + "\n")
+			continue
+		}
 		// Right-pad column-1's rendered cell so col2 lines up. We can't
 		// rely on len(col1) because lipgloss adds escape sequences; compute
 		// the visible width manually.
@@ -393,7 +436,16 @@ func (m *Model) viewPanel() string {
 // inside the current window, capped at perSourceBarMax cells. Sources with 0
 // sessions in the window are omitted.
 func (m *Model) viewPerSource() string {
-	const perSourceBarMax = 24
+	// Bar width adapts: max 24 cells, but never wider than (terminal-12)
+	// so the count column and label fit on the same line in narrow terms.
+	w := m.effectiveWidth()
+	perSourceBarMax := 24
+	if barCap := w - 12; barCap < perSourceBarMax {
+		perSourceBarMax = barCap
+	}
+	if perSourceBarMax < 4 {
+		perSourceBarMax = 4
+	}
 	s := m.stats[m.tab]
 	if len(s.PerSource) == 0 {
 		return ""

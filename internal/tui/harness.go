@@ -56,7 +56,11 @@ const (
 	scriptInput scriptKind = iota
 	scriptEnter
 	scriptEsc
-	scriptDone // sentinel: dump snapshot + quit
+	scriptDown     // \d → down arrow
+	scriptUp       // \u → up arrow
+	scriptPageDown // \D → page down
+	scriptPageUp   // \U → page up
+	scriptDone     // sentinel: dump snapshot + quit
 )
 
 // loadHarness inspects the env and returns a configured harness, or nil if
@@ -99,6 +103,26 @@ func parseScript(s string) []scriptStep {
 				steps = append(steps, scriptStep{kind: scriptEsc})
 				i++
 				continue
+			case 'd':
+				flush()
+				steps = append(steps, scriptStep{kind: scriptDown})
+				i++
+				continue
+			case 'u':
+				flush()
+				steps = append(steps, scriptStep{kind: scriptUp})
+				i++
+				continue
+			case 'D':
+				flush()
+				steps = append(steps, scriptStep{kind: scriptPageDown})
+				i++
+				continue
+			case 'U':
+				flush()
+				steps = append(steps, scriptStep{kind: scriptPageUp})
+				i++
+				continue
 			case '\\':
 				buf = append(buf, '\\')
 				i++
@@ -131,6 +155,18 @@ func (h *harness) drive(p *tea.Program, m *Model) {
 					}
 					time.Sleep(keystrokeDelay)
 				}
+			case scriptDown:
+				p.Send(tea.KeyMsg{Type: tea.KeyDown})
+				time.Sleep(keystrokeDelay)
+			case scriptUp:
+				p.Send(tea.KeyMsg{Type: tea.KeyUp})
+				time.Sleep(keystrokeDelay)
+			case scriptPageDown:
+				p.Send(tea.KeyMsg{Type: tea.KeyPgDown})
+				time.Sleep(keystrokeDelay)
+			case scriptPageUp:
+				p.Send(tea.KeyMsg{Type: tea.KeyPgUp})
+				time.Sleep(keystrokeDelay)
 			case scriptEnter:
 				time.Sleep(terminalDelay) // let last search settle
 				h.dumpSnapshot(m)
@@ -154,12 +190,45 @@ func (h *harness) drive(p *tea.Program, m *Model) {
 // dumpSnapshot writes the model's debug state to outPath / stderr. Errors are
 // best-effort: a missing directory or permission denial just falls back to
 // stderr so the verifier can still see something.
+//
+// When LLM_RECALL_TEST_VIEW=1 we also append the live View() output (with
+// ANSI stripped to keep grep happy). Useful for asserting "list item is
+// single-line" / "tooSmall fallback rendered".
 func (h *harness) dumpSnapshot(m *Model) {
 	out := m.debugSnapshot()
+	if os.Getenv("LLM_RECALL_TEST_VIEW") != "" {
+		out += "---VIEW---\n" + stripANSI(m.View()) + "\n"
+	}
 	if h.outPath != "" {
 		if err := os.WriteFile(h.outPath, []byte(out), 0o644); err == nil {
 			return
 		}
 	}
 	fmt.Fprint(os.Stderr, "---SNAPSHOT---\n"+out+"---END---\n")
+}
+
+// stripANSI removes all ANSI CSI/SGR escape sequences from s. We only strip
+// the "ESC [ … letter" form; that's everything lipgloss emits today. A
+// dedicated dependency is overkill for this single test-only path.
+func stripANSI(s string) string {
+	var b []byte
+	i := 0
+	for i < len(s) {
+		if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '[' {
+			j := i + 2
+			for j < len(s) {
+				c := s[j]
+				if c >= 0x40 && c <= 0x7e {
+					j++
+					break
+				}
+				j++
+			}
+			i = j
+			continue
+		}
+		b = append(b, s[i])
+		i++
+	}
+	return string(b)
 }

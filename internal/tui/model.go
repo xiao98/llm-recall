@@ -17,6 +17,8 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,12 +61,24 @@ type Model struct {
 
 	// Layout: width/height come from a tea.WindowSizeMsg on first paint.
 	width, height int
+	// tooSmall is set when width<60 or height<16. View() returns a plain
+	// fallback string in that case so lipgloss never has to render a 4-cell
+	// pane. Recomputed on every WindowSizeMsg.
+	tooSmall bool
+	// Layout slots, populated by recomputeLayout(). View() reads these
+	// directly instead of recomputing — avoids the bug where View() and
+	// formatList() drifted apart in W3.
+	listW, listH, previewW int
 
 	// Search box (top), list pane (left), preview pane (right). textinput +
 	// viewport from bubbles handle low-level concerns (cursor, scrolling).
 	input    textinput.Model
 	preview  viewport.Model
 	selected int // index into results
+	// scrollOffset is the index of the first list row currently shown.
+	// We keep it in Model rather than recomputing in View() so the scroll
+	// state is stable across resizes.
+	scrollOffset int
 
 	results []search.Result
 
@@ -116,7 +130,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.tooSmall = msg.Width < 60 || msg.Height < 16
 		m.relayout()
+		m.clampScroll()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -136,6 +152,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.selected >= len(m.results) {
 			m.selected = 0
 		}
+		m.clampScroll()
 		m.refreshPreview()
 		return m, nil
 
@@ -156,12 +173,14 @@ func (m *Model) onKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyDown:
 		if m.selected+1 < len(m.results) {
 			m.selected++
+			m.clampScroll()
 			m.refreshPreview()
 		}
 		return m, nil
 	case keyUp:
 		if m.selected > 0 {
 			m.selected--
+			m.clampScroll()
 			m.refreshPreview()
 		}
 		return m, nil
@@ -214,10 +233,13 @@ func (m *Model) Run() (*Selection, error) {
 	p := tea.NewProgram(m, opts...)
 	if m.harness != nil {
 		// Seed an initial WindowSizeMsg so View() / relayout() pick a sane
-		// width even without a real terminal.
+		// width even without a real terminal. Override default 120x30 with
+		// LLM_RECALL_TEST_TERM_WIDTH/HEIGHT when set so the resize harness
+		// can exercise multiple sizes against the same binary.
+		w, h := envTermSize(120, 30)
 		go func() {
 			time.Sleep(50 * time.Millisecond)
-			p.Send(tea.WindowSizeMsg{Width: 120, Height: 30})
+			p.Send(tea.WindowSizeMsg{Width: w, Height: h})
 			m.harness.drive(p, m)
 		}()
 	}
@@ -233,6 +255,28 @@ func (m *Model) Run() (*Selection, error) {
 type nopReader struct{}
 
 func (nopReader) Read(p []byte) (int, error) { return 0, io.EOF }
+
+// envTermSize lets the harness override the seed WindowSizeMsg via env vars.
+// We don't use a real PTY because the resize bug we're fixing is layout
+// math, not terminal I/O — feeding a fake WindowSizeMsg exercises the same
+// code path Update() runs on a SIGWINCH.
+func envTermSize(defW, defH int) (int, int) {
+	w := envInt("LLM_RECALL_TEST_TERM_WIDTH", defW)
+	h := envInt("LLM_RECALL_TEST_TERM_HEIGHT", defH)
+	return w, h
+}
+
+func envInt(name string, def int) int {
+	v := os.Getenv(name)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return def
+	}
+	return n
+}
 
 // refreshPreview redraws the right pane to reflect m.selected. We re-render
 // from scratch every time rather than diffing — it's cheap (one body, max
@@ -261,6 +305,12 @@ func (m *Model) debugSnapshot() string {
 	fmt.Fprintf(&b, "QUERY=%s\n", m.input.Value())
 	fmt.Fprintf(&b, "SOURCE=%s\n", m.cfg.Source)
 	fmt.Fprintf(&b, "DRYRUN=%t\n", m.cfg.DryRun)
+	fmt.Fprintf(&b, "TERM=%dx%d\n", m.width, m.height)
+	fmt.Fprintf(&b, "TOOSMALL=%t\n", m.tooSmall)
+	fmt.Fprintf(&b, "LISTW=%d LISTH=%d PREVIEWW=%d\n", m.listW, m.listH, m.previewW)
+	fmt.Fprintf(&b, "SELECTED=%d SCROLL=%d RANGE=[%d,%d)\n",
+		m.selected, m.scrollOffset, m.scrollOffset, m.scrollOffset+m.listH)
+	fmt.Fprintf(&b, "PREVIEW_OFFSET=%d\n", m.preview.YOffset)
 	fmt.Fprintf(&b, "RESULTS=%d\n", len(m.results))
 	maxRows := 5
 	if len(m.results) < maxRows {
