@@ -54,8 +54,8 @@ go build -o llm-recall ./cmd/llm-recall
 ### TUI 模糊搜索（默认）
 
 ```bash
-llm-recall                    # dry-run（选中只打印 resume 命令）
-llm-recall --no-dry-run       # 选中后真起子进程进入会话
+llm-recall                    # 默认：选中后真起子进程进入对应 CLI 会话
+llm-recall --dry-run          # 调试模式：选中只打印 resume 命令不真起子进程
 llm-recall --source codex     # 只搜 codex 会话
 ```
 

@@ -141,8 +141,8 @@ func ensureOnboarded(cfg *config.Config) {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage: llm-recall [tui-flags] | ls [...] | stats [...] | onboarding | version")
-	fmt.Fprintln(os.Stderr, "  (no args)             open TUI search (dry-run by default)")
-	fmt.Fprintln(os.Stderr, "  --no-dry-run          really exec the resume recipe on Enter")
+	fmt.Fprintln(os.Stderr, "  (no args)             open TUI search; Enter on a row execs the resume recipe")
+	fmt.Fprintln(os.Stderr, "  --dry-run             print the exec line without spawning the child (for debugging)")
 	fmt.Fprintln(os.Stderr, "  --no-promo            disable banner / search footer / sponsored")
 	fmt.Fprintln(os.Stderr, "  --source <name>       limit to one adapter")
 	fmt.Fprintln(os.Stderr, "  ls [-n N] [--all] [--no-cache] [--source claude|codex|gemini]")
@@ -209,15 +209,20 @@ func cmdLs(args []string) {
 	_ = w.Flush()
 }
 
-// cmdTUI parses TUI flags and runs the bubbletea model. Dry-run is the
-// default; --no-dry-run flips to real exec. After the TUI returns, the
-// launcher executes the chosen Selection (if any).
+// cmdTUI parses TUI flags and runs the bubbletea model. Real exec is the
+// default; --dry-run flips to print-only (debugging / scripting). The legacy
+// --no-dry-run flag is accepted as a no-op alias with a deprecation warning
+// so users on the old habit don't get an "unknown flag" error mid-demo.
 func cmdTUI(args []string, cfg *config.Config) {
 	fs := flag.NewFlagSet("tui", flag.ExitOnError)
-	noDryRun := fs.Bool("no-dry-run", false, "really exec the chosen resume recipe")
+	dryRun := fs.Bool("dry-run", false, "print the exec line without spawning the child (for debugging)")
+	legacyNoDryRun := fs.Bool("no-dry-run", false, "deprecated alias (real exec is now the default; this flag is a no-op)")
 	source := fs.String("source", "", "limit to one adapter: claude|codex|gemini")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
+	}
+	if *legacyNoDryRun {
+		fmt.Fprintln(os.Stderr, "warn: --no-dry-run is now the default; flag is a no-op and will be removed in v0.3")
 	}
 	if *source != "" {
 		if _, ok := validSources[*source]; !ok {
@@ -250,11 +255,10 @@ func cmdTUI(args []string, cfg *config.Config) {
 	}
 	defer cache.Close()
 
-	dryRun := !*noDryRun
 	model := tui.New(tui.Config{
 		DB:     cache.DB(),
 		Source: *source,
-		DryRun: dryRun,
+		DryRun: *dryRun,
 		Promo:  cfg,
 	})
 	sel, err := model.Run()
@@ -267,7 +271,7 @@ func cmdTUI(args []string, cfg *config.Config) {
 		return
 	}
 
-	l := launcher.New(dryRun)
+	l := launcher.New(*dryRun)
 	code, err := l.Run(sel.Session)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: launcher: %v\n", err)

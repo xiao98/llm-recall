@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"time"
 
 	"github.com/xiao98/llm-recall/internal/adapter"
 )
@@ -157,10 +158,18 @@ func (l *Launcher) RunPlan(plan *Plan) (int, error) {
 		// Common path: print the exec line, then either return (dry-run) or exec.
 		fmt.Fprintf(out, "→ exec: %s in %s\n", joinArgv(plan.Argv), plan.CWD)
 		if plan.Mode == adapter.ResumeInteractive && plan.Hint != "" {
-			fmt.Fprintln(out, plan.Hint)
+			// Print the hint to stderr so it survives stdout redirection,
+			// and pause briefly so the child REPL doesn't paint over it
+			// before the user has read the sessionId.
+			fmt.Fprintln(errw, "")
+			fmt.Fprintln(errw, plan.Hint)
+			fmt.Fprintln(errw, "")
 		}
 		if l.DryRun {
 			return 0, nil
+		}
+		if plan.Mode == adapter.ResumeInteractive {
+			time.Sleep(1500 * time.Millisecond)
 		}
 		return l.exec(plan, errw)
 	}
@@ -177,6 +186,14 @@ func (l *Launcher) RunPlan(plan *Plan) (int, error) {
 func (l *Launcher) exec(plan *Plan, errw io.Writer) (int, error) {
 	if len(plan.Argv) == 0 {
 		return 1, fmt.Errorf("launcher: empty argv")
+	}
+	// Test hook. When LLM_RECALL_LAUNCHER_FAKE_EXEC is set, write a one-line
+	// trace to errw and return 0 instead of really spawning the child. Lets
+	// integration tests assert argv/cwd construction without owning a real
+	// claude/codex/gemini binary.
+	if os.Getenv("LLM_RECALL_LAUNCHER_FAKE_EXEC") != "" {
+		fmt.Fprintf(errw, "FAKE_EXEC argv=%v cwd=%s source=%s\n", plan.Argv, plan.CWD, plan.Source)
+		return 0, nil
 	}
 	// Resolve the binary via PATH (and PATHEXT on Windows, so `claude` finds
 	// `claude.cmd`). If it's not there, exit 127 to match the shell convention.

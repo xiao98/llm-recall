@@ -191,6 +191,67 @@ func TestBuild_UnknownSource(t *testing.T) {
 	}
 }
 
+// TestRunRealExec_FakeHook verifies non-dry-run path under the FAKE_EXEC test
+// hook: argv / cwd / source land in stderr exactly as constructed, and the
+// process returns 0 instead of really spawning the child.
+func TestRunRealExec_FakeHook(t *testing.T) {
+	t.Setenv("LLM_RECALL_LAUNCHER_FAKE_EXEC", "1")
+	cwd := t.TempDir() // must exist so chdir doesn't warn
+	cases := []struct {
+		name   string
+		plan   Plan
+		expect string
+	}{
+		{
+			"claude_direct",
+			Plan{Argv: []string{"claude", "--resume", "abc-123"}, CWD: cwd, Mode: adapter.ResumeDirect, Source: "claude"},
+			"FAKE_EXEC argv=[claude --resume abc-123]",
+		},
+		{
+			"codex_direct",
+			Plan{Argv: []string{"codex", "resume", "x9"}, CWD: cwd, Mode: adapter.ResumeDirect, Source: "codex"},
+			"FAKE_EXEC argv=[codex resume x9]",
+		},
+		{
+			"gemini_interactive",
+			Plan{Argv: []string{"gemini"}, CWD: cwd, Mode: adapter.ResumeInteractive, Hint: "→ 进入后请运行：/chat resume sid42", Source: "gemini", SessionID: "sid42"},
+			"FAKE_EXEC argv=[gemini]",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			l := &Launcher{DryRun: false, Stdout: &stdout, Stderr: &stderr}
+			start := time.Now()
+			code, err := l.RunPlan(&tc.plan)
+			elapsed := time.Since(start)
+			if err != nil {
+				t.Fatalf("RunPlan: %v", err)
+			}
+			if code != 0 {
+				t.Errorf("exit code: want 0, got %d", code)
+			}
+			if !strings.Contains(stderr.String(), tc.expect) {
+				t.Errorf("stderr missing %q:\n%s", tc.expect, stderr.String())
+			}
+			// Interactive mode pauses 1.5s before exec so the user can read
+			// the hint; the other modes should not.
+			if tc.plan.Mode == adapter.ResumeInteractive {
+				if elapsed < 1400*time.Millisecond {
+					t.Errorf("interactive: expected ≥ 1.4s pause before exec, got %v", elapsed)
+				}
+				if !strings.Contains(stderr.String(), tc.plan.Hint) {
+					t.Errorf("interactive: hint should land on stderr:\n%s", stderr.String())
+				}
+			} else {
+				if elapsed > 500*time.Millisecond {
+					t.Errorf("non-interactive: unexpected delay %v", elapsed)
+				}
+			}
+		})
+	}
+}
+
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
