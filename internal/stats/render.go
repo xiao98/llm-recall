@@ -207,6 +207,8 @@ func (m *Model) View() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.viewPanel())
 	b.WriteString("\n")
+	b.WriteString(m.viewPerSource())
+	b.WriteString("\n")
 	b.WriteString(colLabel.Render("  ←/→ switch window · 1/2/3 jump · q quit"))
 	b.WriteString("\n")
 	return b.String()
@@ -359,6 +361,76 @@ func (m *Model) viewPanel() string {
 			colValue.Render(r[1][1]),
 		)
 		b.WriteString("  " + col1 + "    " + col2 + "\n")
+	}
+	return b.String()
+}
+
+// viewPerSource renders a small horizontal bar chart with one row per source,
+// sorted by session count desc. Bars scale relative to the largest source
+// inside the current window, capped at perSourceBarMax cells. Sources with 0
+// sessions in the window are omitted.
+func (m *Model) viewPerSource() string {
+	const perSourceBarMax = 24
+	s := m.stats[m.tab]
+	if len(s.PerSource) == 0 {
+		return ""
+	}
+
+	type kv struct {
+		name string
+		n    int
+	}
+	rows := make([]kv, 0, len(s.PerSource))
+	max := 0
+	for name, n := range s.PerSource {
+		if n == 0 {
+			continue
+		}
+		rows = append(rows, kv{name, n})
+		if n > max {
+			max = n
+		}
+	}
+	if len(rows) == 0 {
+		return ""
+	}
+	// Stable sort: descending count, ties broken by name asc.
+	for i := 0; i < len(rows); i++ {
+		for j := i + 1; j < len(rows); j++ {
+			if rows[j].n > rows[i].n || (rows[j].n == rows[i].n && rows[j].name < rows[i].name) {
+				rows[i], rows[j] = rows[j], rows[i]
+			}
+		}
+	}
+
+	nameW := 0
+	for _, r := range rows {
+		if l := len(r.name); l > nameW {
+			nameW = l
+		}
+	}
+
+	barStyle := lipgloss.NewStyle().Foreground(colOrange)
+	dimBar := lipgloss.NewStyle().Foreground(colHeatEmpty)
+
+	var b strings.Builder
+	b.WriteString(colLabel.Render("  Per source") + "\n")
+	for _, r := range rows {
+		filled := perSourceBarMax * r.n / max
+		if filled < 1 && r.n > 0 {
+			filled = 1
+		}
+		empty := perSourceBarMax - filled
+		bar := barStyle.Render(strings.Repeat("█", filled))
+		if empty > 0 {
+			bar += dimBar.Render(strings.Repeat("█", empty))
+		}
+		line := fmt.Sprintf("    %s  %s  %s",
+			colLabel.Render(padRight(r.name, nameW)),
+			bar,
+			colValue.Render(fmt.Sprintf("%d", r.n)),
+		)
+		b.WriteString(line + "\n")
 	}
 	return b.String()
 }

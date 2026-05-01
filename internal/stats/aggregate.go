@@ -37,16 +37,17 @@ type Stats struct {
 	Now time.Time
 
 	// 4×2 panel cells.
-	FavoriteSource    string        // top source by session count; "" if no sessions
-	TotalTokens       int64         // sum of per-session tokens (TOKEN-AUDIT.md rules)
-	Sessions          int           // number of sessions in window
-	LongestSession    time.Duration // max(updated - started)
-	ActiveDays        int           // unique calendar days (local TZ) in window
-	WindowDaysSpan    int           // denominator for ActiveDays (1 + days from window-start to today)
-	LongestStreak     int           // max consecutive active days inside the window
-	MostActiveDay     time.Time     // day with highest session count (zero if none)
-	MostActiveDayHits int           // sessions on MostActiveDay
-	CurrentStreak     int           // consecutive active days ending today (or yesterday if today blank)
+	FavoriteSource    string         // top source by session count; "" if no sessions
+	PerSource         map[string]int // session count by source (claude/codex/gemini); used for per-source breakdown row
+	TotalTokens       int64          // sum of per-session tokens (TOKEN-AUDIT.md rules)
+	Sessions          int            // number of sessions in window
+	LongestSession    time.Duration  // max(updated - started)
+	ActiveDays        int            // unique calendar days (local TZ) in window
+	WindowDaysSpan    int            // denominator for ActiveDays (1 + days from window-start to today)
+	LongestStreak     int            // max consecutive active days inside the window
+	MostActiveDay     time.Time      // day with highest session count (zero if none)
+	MostActiveDayHits int            // sessions on MostActiveDay
+	CurrentStreak     int            // consecutive active days ending today (or yesterday if today blank)
 
 	// TotalMessages is kept for fallback display and JSON consumers; not on
 	// the rendered panel but cheap to compute alongside.
@@ -153,6 +154,7 @@ func Compute(sessions []adapter.Session, now time.Time, windowDays int, tokenFal
 		WindowStart:       windowStart,
 		Now:               now,
 		FavoriteSource:    favorite,
+		PerSource:         perSource,
 		TotalTokens:       totalTokens,
 		Sessions:          len(sessionsInWindow),
 		LongestSession:    longest,

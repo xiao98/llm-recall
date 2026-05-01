@@ -124,12 +124,16 @@ type FileMeta struct { Path string; ModTime time.Time; Size int64 }
 - 安装命令在 README 头一段：`brew install <user>/tap/llm-recall`
 
 ### P0-5 装杯模式（核心引爆点）`llm-recall stats`
-- 扫 30 天会话，本地聚合：对话数 / 总 token / Top 5 话题（用户消息词频，去停用词）/ 最长会话 / 每家 CLI 占比
-- POST 数据到 Scaleway 生图后端：`POST /v1/stats-card { stats, watermark, format: "square"|"vertical" }`
-- 后端用 Pillow 套模板返 PNG，本地落盘 `~/Pictures/llm-recall/stats-YYYYMMDD-{1,2}.png`
-- 命令完成后打印图片路径 + "Open in Finder/Explorer? [y/n]"
-- **水印**：右下角 `llm-recall · sponsored by YCAPI`（默认开，`--no-watermark` 关）
-- 输出两版：1080×1080 / 1080×1920
+
+**W5 pivot（rev1）**：从 Pillow + Scaleway 后端 PNG 改为**终端原生 ASCII heatmap**（wakatime / git-stats / topgrade 同 vibe）。单二进制零依赖；开发者终端截图本身就是传播载体，无需 PNG 中转。
+
+- 全本地聚合，无任何网络出口
+- 三 tab 切换（`1/2/3` 或 `←/→`）：All time / Last 7 days / Last 30 days
+- GitHub-style 7-row 贡献日历 heatmap，`⋅ ▒ ▓ █` 四档（lipgloss 24-bit 色，#FF6B35 系），月份行 + 工作日标签
+- 4×2 面板：Sessions / Total tokens / Active days / Longest streak · Favorite source / Longest session / Most active day / Current streak
+- `q` 退出；`--json` 输出给 pipe（自动化）
+- footer 字符串 `llm-recall · sponsored by YCAPI`（受 W6 `--no-promo` 统一控制；不再是图片水印）
+- **不再做**：Pillow 后端 / Scaleway 部署 / `~/Pictures/` 落盘 / PNG 1080x1080 双尺寸 / `--no-watermark` flag
 
 ### P0-6 启动 banner
 - 每次 TUI 启动顶栏一行金句（YCAPI 群语录，30 条起步，存 `internal/promo/quotes.go`）
@@ -144,12 +148,18 @@ type FileMeta struct { Path string; ModTime time.Time; Size int64 }
 - 实现：在 TUI list footer slot 渲染
 
 ### P0-8 一键出图（取代 share）
+
+> ⚠️ **W5 pivot 后待重新评估**：终端原生路线 vs Go 本地 PNG 渲染（如 fogleman/gg） vs 重启 Pillow 后端。W7 写 P0-9 任务文档前由策划方拍板。下面是原 spec，仅供参考。
+
 - 在搜索结果上选中后按 `s` → `llm-recall card <session-id>`
 - 内容：会话脱敏摘要（首条 user msg + LLM 1 句话总结，BYOK 调）
 - 同样调 Scaleway 后端 → 出图 → 落盘
 - 提示用户：「Saved to <path>. 截图发朋友圈/即刻吧」（不做 share 后端）
 
 ### P0-9 金句挖掘 `llm-recall gold`
+
+> ⚠️ **W5 pivot 后待重新评估输出形态**：终端长格式 markdown / 终端 ASCII 卡片 / Go 本地 PNG / Pillow 后端长图。W7 任务文档前拍板。下面是原 spec，仅供参考。
+
 - 扫 7 天会话（默认窗口可配置）
 - BYOK：自动探测 `ANTHROPIC_API_KEY` 或 `OPENAI_API_KEY`，没有就报错引导配置
 - 调 LLM 抽 Top 10 用户金句（prompt 模板见 `internal/llm/gold_prompt.go`）
@@ -164,7 +174,7 @@ llm-recall — 跨厂商 LLM CLI 会话搜索
 
 This tool is sponsored by YCAPI (https://ycapi.com).
 - 启动时显示一条金句 banner，5% 概率含加群链接
-- stats / gold 生成的图片右下角带水印
+- stats 命令底部一行 sponsored 字符串（`--no-promo` 关）
 - gold 功能调用你自己的 LLM API key（不上传任何对话内容到 YCAPI）
 
 可以用以下开关关闭：
@@ -196,7 +206,7 @@ This tool is sponsored by YCAPI (https://ycapi.com).
 | W2 | Codex/Gemini adapter + SQLite cache | 三家全扫 + 增量 |
 | W3 | TUI 搜索 + resume launcher | 闭环：搜 → 选 → 进入会话 |
 | W4 | goreleaser + brew tap + scoop + dogfood 一周 | 自己装自己用 |
-| W5 | Scaleway 生图后端 + stats 命令 | 出图能发朋友圈 |
+| W5 | stats 终端原生 heatmap（pivot from Pillow 后端） | 截屏发朋友圈 |
 | W6 | banner / footer / onboarding / `--no-promo` | 透明度声明就位 |
 | W7 | gold 命令（BYOK） + 一键出图 | 全部 P0 闭环 |
 | W8 | README + landing + 公众号文 + Reddit/HN 发车 | 公开发布 |

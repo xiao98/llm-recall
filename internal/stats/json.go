@@ -43,6 +43,7 @@ func (m *Model) WriteJSON(w io.Writer) error {
 			"window_days":         s.WindowDays,
 			"window_days_span":    s.WindowDaysSpan,
 			"favorite_source":     s.FavoriteSource,
+			"per_source":          s.PerSource,
 			"total_tokens":        s.TotalTokens,
 			"total_tokens_human":  FormatTokens(s.TotalTokens),
 			"sessions":            s.Sessions,
