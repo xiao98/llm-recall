@@ -1,0 +1,10 @@
+{
+  "sessionId": "1e38cc56-8ae4-4e5d-95ff-359f570ab40c",
+  "projectHash": "projhash1aaaaaaaa",
+  "startTime": "2025-10-31T13:56:41.524Z",
+  "lastUpdated": "2025-10-31T14:06:49.508Z",
+  "messages": [
+    {"id":"x","timestamp":"2025-10-31T13:56:41.524Z","type":"user","content":"分析这个文件夹的进度\n并总结"},
+    {"id":"y","timestamp":"2025-10-31T13:56:58.175Z","type":"gemini","content":"好的","thoughts":[{"subject":"a","description":"b","timestamp":"x"}]}
+  ]
+}

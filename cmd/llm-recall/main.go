@@ -38,19 +38,38 @@ func main() {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage: llm-recall <ls|version>")
-	fmt.Fprintln(os.Stderr, "  ls [-n N] [--all]    list LLM CLI sessions on this machine")
+	fmt.Fprintln(os.Stderr, "  ls [-n N] [--all] [--no-cache] [--source claude|codex|gemini]")
+	fmt.Fprintln(os.Stderr, "                       list LLM CLI sessions on this machine")
 	fmt.Fprintln(os.Stderr, "  version              print version")
+}
+
+// validSources gates --source values. New adapters must be added here.
+var validSources = map[string]struct{}{
+	"claude": {},
+	"codex":  {},
+	"gemini": {},
 }
 
 func cmdLs(args []string) {
 	fs := flag.NewFlagSet("ls", flag.ExitOnError)
 	limit := fs.Int("n", 50, "max rows to show")
 	all := fs.Bool("all", false, "show all rows (overrides -n)")
+	noCache := fs.Bool("no-cache", false, "force re-parse, ignore SQLite cache (still updates it)")
+	source := fs.String("source", "", "limit to one adapter: claude|codex|gemini")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
+	if *source != "" {
+		if _, ok := validSources[*source]; !ok {
+			fmt.Fprintf(os.Stderr, "error: --source must be one of claude|codex|gemini, got %q\n", *source)
+			os.Exit(1)
+		}
+	}
 
-	sessions, err := index.DiscoverAll(context.Background())
+	sessions, err := index.DiscoverAll(context.Background(), index.Options{
+		UseCache: !*noCache,
+		Source:   *source,
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)

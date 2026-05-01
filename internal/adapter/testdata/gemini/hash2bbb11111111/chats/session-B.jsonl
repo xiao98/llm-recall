@@ -1,0 +1,6 @@
+{"sessionId":"81e6964e-a363-4d2d-a1ac-e7d06bf51334","projectHash":"projhash2bbbbbbbb","startTime":"2026-04-25T12:08:09.589Z","lastUpdated":"2026-04-25T12:08:09.589Z","kind":"main"}
+{"$set":{"lastUpdated":"2026-04-25T12:08:18.829Z"}}
+{"id":"abc","timestamp":"2026-04-25T12:08:11.000Z","type":"gemini","content":"hi","thoughts":[]}
+{"id":"f905b490","timestamp":"2026-04-25T12:08:18.829Z","type":"user","content":[{"text":"你在cli里有deepresearch的功能吗？"}]}
+{"$rewindTo":"f905b490"}
+{"id":"def","timestamp":"2026-04-25T12:08:27.060Z","type":"gemini","content":"...","toolCalls":[]}

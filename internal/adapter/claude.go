@@ -109,6 +109,12 @@ func (c *Claude) ResumeCommand(s Session) ([]string, string) {
 	return []string{"claude", "--resume", s.ID}, s.CWD
 }
 
+// ParseFile is the FileParser capability — single-file parse for the cache
+// miss path. Discover()'s loop body uses the same helper.
+func (c *Claude) ParseFile(path string) (Session, error) {
+	return parseClaudeSessionFile(path)
+}
+
 // claudeRecord is a permissive view of one jsonl row. Only the fields we
 // actually inspect are decoded; the rest is swallowed.
 type claudeRecord struct {
@@ -174,7 +180,7 @@ func parseClaudeSessionFile(path string) (Session, error) {
 		}
 		if title == "" && rec.Type == "user" && rec.Message != nil {
 			if text, ok := extractUserText(rec.Message.Content); ok {
-				title = text
+				title = CleanTitle(text)
 			}
 		}
 		if cwd != "" && title != "" && !started.IsZero() {
