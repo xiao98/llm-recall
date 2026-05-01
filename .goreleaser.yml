@@ -61,7 +61,7 @@ brews:
       owner: xiao98
       name: homebrew-tap
       branch: main
-      token: "{{ if not .IsSnapshot }}{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}{{ end }}"
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: "https://recall.youchun.tech"
     description: "Cross-vendor LLM CLI session search & resume TUI"
     license: "MIT"
@@ -76,7 +76,7 @@ scoops:
       owner: xiao98
       name: scoop-bucket
       branch: main
-      token: "{{ if not .IsSnapshot }}{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}{{ end }}"
+      token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
     homepage: "https://recall.youchun.tech"
     description: "Cross-vendor LLM CLI session search & resume TUI"
     license: MIT
