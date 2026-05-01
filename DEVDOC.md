@@ -172,7 +172,7 @@ type FileMeta struct { Path string; ModTime time.Time; Size int64 }
 ```
 llm-recall — 跨厂商 LLM CLI 会话搜索
 
-This tool is sponsored by YCAPI (https://ycapi.com).
+This tool is sponsored by YCAPI (https://api.youchun.tech).
 - 启动时显示一条金句 banner，5% 概率含加群链接
 - stats 命令底部一行 sponsored 字符串（`--no-promo` 关）
 - gold 功能调用你自己的 LLM API key（不上传任何对话内容到 YCAPI）
