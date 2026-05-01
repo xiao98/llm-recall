@@ -6,7 +6,11 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/xiao98/llm-recall.svg)](https://pkg.go.dev/github.com/xiao98/llm-recall)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Homepage: <https://recall.youchun.tech> · Sponsored by [YCAPI](https://api.youchun.tech)（详情见 [Privacy & Promo](#privacy--promo) 段，含 `--no-promo` 一键关闭）
+Homepage: <https://recall.youchun.tech>
+
+> Created within the YC TECH community: <https://recall.youchun.tech>
+
+营销机制（banner / footer / 加群 CTA）默认开启，详情见 [Privacy & Promo](#privacy--promo) 段；`--no-promo` 一键关闭。
 
 <!-- screenshot: docs/screenshots/tui.gif | 录制脚本见 launch/storyboard.md §2 TUI search -->
 
@@ -47,7 +51,7 @@ git clone https://github.com/xiao98/llm-recall && cd llm-recall
 go build -o llm-recall ./cmd/llm-recall
 ```
 
-首次启动会进 onboarding 同意流（一次性），按 `Enter` 接受，按 `q` 退出。同意标记落 `~/.config/llm-recall/onboarding-accepted`。
+首次启动直接进 TUI；如需用 `gold` / `card` 调用 LLM，先跑 `llm-recall login` 配置 provider（API key 落 `~/.config/llm-recall/credentials.toml`，chmod 600；可选 `--use-keyring` 入系统钥匙串）。
 
 ## Usage
 
@@ -121,25 +125,45 @@ cta_probability = 0.05    # 0.0–1.0; chance the banner shows the CTA line
 [llm]
 vendor   = ""             # "anthropic" | "openai" | "" (auto-detect from env)
 model    = ""             # "" = vendor default (claude-haiku-4-5-20251001 / gpt-4o-mini)
-base_url = ""             # "" = official endpoint; e.g. "https://dash.youchun.tech/v1" for the YCAPI relay
+base_url = ""             # "" = official endpoint; e.g. "https://dash.youchun.tech/v1" for the YC TECH relay
 ```
 
 ### LLM (BYOK)
 
-The W7 commands `card` and `gold` call **your own** LLM API. Never put `api_key` / `key` into `config.toml` — `llm-recall` reads keys only from environment variables and warns if it sees one in the TOML file.
+The W7 commands `card` and `gold` call **your own** LLM API. Never put `api_key` / `key` into `config.toml` — `llm-recall` reads keys only from `credentials.toml` (W9), the system keyring, or environment variables. It warns if it sees a key in `config.toml`.
 
-| Env var                 | Purpose                                                |
-| ----------------------- | ------------------------------------------------------ |
-| `ANTHROPIC_API_KEY`     | Used when vendor resolves to anthropic (default first) |
-| `OPENAI_API_KEY`        | Used when vendor resolves to openai                    |
-| `LLM_RECALL_BASE_URL`   | Optional escape hatch; overrides `[llm] base_url`      |
+#### W9: `llm-recall login`
+
+```bash
+llm-recall login                                          # interactive
+llm-recall login --vendor openai --base-url <url>         # non-interactive (key on stdin)
+echo "$KEY" | llm-recall login --vendor openai --pipe-key
+llm-recall login --use-keyring                            # store in OS keyring instead
+```
+
+The key **never** goes through a CLI flag (shell history risk). Hidden input via `golang.org/x/term`.
+
+| Source                                            | Purpose                                                |
+| ------------------------------------------------- | ------------------------------------------------------ |
+| `~/.config/llm-recall/credentials.toml`           | W9 default; chmod 600; one section per vendor          |
+| OS keyring (Keychain / Credential Manager / SS)   | W9 opt-in via `--use-keyring`                          |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` env vars   | Fallback for CI / scripted use                         |
+| `LLM_RECALL_BASE_URL`                             | Optional escape hatch; overrides `[llm] base_url`      |
+
+**Credential resolution priority (high → low)**:
+
+1. `credentials.toml` (vendor section matching the resolved vendor)
+2. System keyring (when `credentials.toml` has `use_keyring = true` for the vendor)
+3. `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` environment variable
+4. Error → `Run: llm-recall login`
 
 **Vendor / model / base URL priority (high → low)**:
 
 1. CLI flag (`--vendor`, `--model`, `--llm-base-url`)
-2. Environment variable (`LLM_RECALL_BASE_URL` for base URL only; vendor is auto-detected from whichever `*_API_KEY` is set, anthropic wins ties)
-3. `config.toml` `[llm]` section
-4. Hardcoded defaults (`anthropic` → `claude-haiku-4-5-20251001`, `openai` → `gpt-4o-mini`)
+2. Environment variable (`LLM_RECALL_BASE_URL` for base URL only)
+3. `credentials.toml` (W9)
+4. `config.toml` `[llm]` section (legacy)
+5. Hardcoded defaults (`anthropic` → `claude-haiku-4-5-20251001`, `openai` → `gpt-4o-mini`)
 
 **Routing through a relay**: set `base_url = "https://dash.youchun.tech/v1"` (or your own gateway). The vendor selection still controls request shape (Anthropic Messages vs OpenAI Chat Completions) — your gateway must speak whichever format matches the vendor you choose.
 
@@ -159,25 +183,14 @@ CWD resolution per source:
 
 ## Privacy & Promo
 
-llm-recall 默认对你机器之外的世界**完全静默**，唯一例外是 BYOK 模式下你自己显式触发的 LLM 调用（去你自己配的 endpoint，不经 YCAPI）。
+llm-recall 默认对你机器之外的世界**完全静默**，唯一例外是 BYOK 模式下你自己显式触发的 LLM 调用（去你自己配的 endpoint）。
 
-**Onboarding 一次同意流**（首次启动）：
+**营销注入说明**（W9 起；启动直接进 TUI，无弹窗）：
 
-> 跨厂商 LLM CLI 会话搜索 + 恢复终端工具
->
-> Sponsored by YCAPI (https://api.youchun.tech)
->
-> 营销注入说明（你看到的所有 YCAPI 痕迹）：
-> - 启动时顶栏一条金句 banner，5% 概率含加群链接
-> - stats 命令底部一行 sponsored 字符串
-> - （可选）搜索结果底部讨论关联条
-> - gold 功能用你自己的 LLM API key，不走 YCAPI 网关
->
-> 关闭方式：
->   `--no-promo`               关 banner / footer / sponsored
->   `config.toml`              细粒度调（详见上文 Configuration）
->
-> Enter 接受继续， q 退出
+- 启动时 TUI 顶栏一条金句 banner，5% 概率含加群链接（`https://recall.youchun.tech`）
+- stats / card / gold 底部一行 attribution（`Created within the YC TECH community`）
+- （可选）搜索结果底部讨论关联条
+- gold / card 用你自己的 LLM API key，不走任何中转网关
 
 **不上传任何对话内容**：
 
@@ -191,9 +204,10 @@ llm-recall 默认对你机器之外的世界**完全静默**，唯一例外是 B
 ```bash
 llm-recall --no-promo                     # 单次
 echo 'no_promo = true' >> ~/.config/llm-recall/config.toml   # 永久（写到 [promo] 段下）
+llm-recall stats --no-pet                 # 单独关闭 stats 像素宠物
 ```
 
-`--no-promo` 关 banner / search footer / stats sponsored line / gold & card footer 全套，一刀切。
+`--no-promo` 关 banner / search footer / stats attribution line / gold & card footer 全套，一刀切。`--no-pet` 只关 stats 右上角的像素宠物（终端宽度 < 100 列也会自动隐藏）。
 
 ## Contributing
 
@@ -214,4 +228,4 @@ MIT — see [LICENSE](LICENSE).
 - [BurntSushi/toml](https://github.com/BurntSushi/toml) — config.toml 解析
 - [sahilm/fuzzy](https://github.com/sahilm/fuzzy) — 模糊匹配
 - [mattn/go-runewidth](https://github.com/mattn/go-runewidth) — CJK runewidth 对齐
-- Sponsored by [YCAPI](https://api.youchun.tech) — LLM API 中转网关
+- Created within the [YC TECH](https://recall.youchun.tech) community

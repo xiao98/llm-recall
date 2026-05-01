@@ -52,6 +52,26 @@ type Stats struct {
 	// TotalMessages is kept for fallback display and JSON consumers; not on
 	// the rendered panel but cheap to compute alongside.
 	TotalMessages int64
+
+	// W9 fields used by the pixel pet (see internal/stats/pet.go).
+	// These are derived facts about the same `sessions` slice; we
+	// compute them in Compute() so the renderer doesn't have to walk
+	// the cache a second time.
+	//
+	// SessionsToday counts sessions whose UpdatedAt fell on `now`'s
+	// local-midnight day. Drives the Pumped state when ≥ 10.
+	SessionsToday int
+	// RecentDays7 counts unique active days in the last 7 calendar
+	// days (today inclusive). Zero ⇒ Sleeping pet.
+	RecentDays7 int
+	// HasRecordToday reports whether `now`'s day equals MostActiveDay
+	// AND the count is the all-time max for the window. Drives
+	// Cheering pet — "you set a new record today".
+	HasRecordToday bool
+	// AnomalousData is true when sessions > 0 but TotalTokens == 0
+	// (i.e. our token extraction silently failed). Drives Confused
+	// pet so the user has a visual cue that something's off.
+	AnomalousData bool
 }
 
 // DailyCount is one cell of the heatmap source data.
@@ -149,6 +169,19 @@ func Compute(sessions []adapter.Session, now time.Time, windowDays int, tokenFal
 		span = 1
 	}
 
+	// W9 pet-driver fields — cheap to compute from the same maps.
+	todayKey := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	sessionsToday := perDay[todayKey]
+	recent7 := 0
+	for k := 0; k < 7; k++ {
+		d := todayKey.AddDate(0, 0, -k)
+		if perDay[d] > 0 {
+			recent7++
+		}
+	}
+	hasRecordToday := !mostDay.IsZero() && mostDay.Equal(todayKey) && perDay[todayKey] == mostHits
+	anomalous := len(sessionsInWindow) > 0 && totalTokens == 0
+
 	return Stats{
 		WindowDays:        windowDays,
 		WindowStart:       windowStart,
@@ -165,6 +198,10 @@ func Compute(sessions []adapter.Session, now time.Time, windowDays int, tokenFal
 		MostActiveDayHits: mostHits,
 		CurrentStreak:     currentStreak,
 		TotalMessages:     totalMessages,
+		SessionsToday:     sessionsToday,
+		RecentDays7:       recent7,
+		HasRecordToday:    hasRecordToday,
+		AnomalousData:     anomalous,
 	}
 }
 

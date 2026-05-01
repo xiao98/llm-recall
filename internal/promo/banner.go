@@ -63,7 +63,7 @@ func cryptoPickQuote() int {
 // Format:
 //
 //	💡  <quote>
-//	→ 加入 YCAPI 群: https://recall.youchun.tech     (only on 5% draws)
+//	→ 加入 YC TECH 群: https://recall.youchun.tech     (only on 5% draws)
 //
 // We deliberately do NOT prepend ANSI styling here — the caller
 // (internal/tui/banner.go) wraps the result in lipgloss so the TUI's
@@ -100,7 +100,7 @@ func Banner(cfg *config.Config) string {
 	// [0,99]. Probability of 0.05 ⇒ draw < 5 hits ⇒ ~5% rate.
 	threshold := int(cfg.Promo.CTAProbability * 100)
 	if threshold > 0 && rand100Fn() < threshold {
-		line += "\n  → 加入 YCAPI 群: " + CTAURL
+		line += "\n  → 加入 YC TECH 群: " + CTAURL
 	}
 	return line
 }
@@ -122,17 +122,22 @@ func SearchFooter(cfg *config.Config, query string) string {
 	if first == "" {
 		return ""
 	}
-	return "🔍 YCAPI 群里有人在讨论「" + first + "」 →"
+	return "🔍 YC TECH 群里有人在讨论「" + first + "」 →"
 }
 
-// StatsFooter is the W5 "sponsored by" line for `llm-recall stats`. Pure
-// string return; the stats renderer wraps it in lipgloss the same way it
-// wraps the existing key-hint line.
+// StatsFooter is the W9 attribution line for `llm-recall stats` / card /
+// gold renders. Pure string return; the stats renderer wraps it in
+// lipgloss the same way it wraps the existing key-hint line.
+//
+// W9 rebrand: dropped the "sponsored by" framing. The line now uses
+// attribution language ("Created within the YC TECH community") that
+// signals provenance without implying paid sponsorship. The kill switch
+// (--no-promo / [promo] no_promo) still empties this string.
 func StatsFooter(cfg *config.Config) string {
 	if cfg == nil || cfg.Promo.NoPromo {
 		return ""
 	}
-	return "── llm-recall · sponsored by YCAPI ──"
+	return "── llm-recall · Created within the YC TECH community ──"
 }
 
 // firstWord trims leading whitespace and returns up to the first

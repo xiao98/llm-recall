@@ -21,6 +21,15 @@ type jsonSnapshot struct {
 	HeatmapCols   int            `json:"heatmap_cols"`
 	HeatmapMonths []string       `json:"heatmap_months"`
 	DailyCounts   []dailyJSON    `json:"daily_counts"`
+	// W9: Top-N topic tokens across the full session set, descending
+	// by frequency. Pipeline consumers can render this however they
+	// like; the TUI hardcodes 5.
+	TopTopics []topicJSON `json:"top_topics"`
+}
+
+type topicJSON struct {
+	Token string `json:"token"`
+	Count int    `json:"count"`
 }
 
 type dailyJSON struct {
@@ -70,12 +79,18 @@ func (m *Model) WriteJSON(w io.Writer) error {
 		})
 	}
 
+	topics := make([]topicJSON, 0, len(m.topics))
+	for _, t := range m.topics {
+		topics = append(topics, topicJSON{Token: t.Token, Count: t.Count})
+	}
+
 	snap := jsonSnapshot{
 		GeneratedAt:   m.now.Format("2006-01-02T15:04:05Z07:00"),
 		StatsPerTab:   statsByTab,
 		HeatmapCols:   m.heatmap.Cols,
 		HeatmapMonths: m.heatmap.MonthLabels,
 		DailyCounts:   rows,
+		TopTopics:     topics,
 	}
 
 	enc := json.NewEncoder(w)

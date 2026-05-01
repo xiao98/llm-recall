@@ -21,7 +21,7 @@ func TestRenderCardSmoke(t *testing.T) {
 		FirstUser:  "claude code的历史会话管理太垃圾了",
 		Action:     "调试 sqlite cache 的 mtime 失效逻辑",
 		CWD:        "~/llm-recall",
-		Footer:     "── llm-recall · sponsored by YCAPI ──",
+		Footer:     "── llm-recall · Created within the YC TECH community ──",
 	}
 	out := llm.RenderCard(d)
 	for _, want := range []string{
@@ -32,7 +32,7 @@ func TestRenderCardSmoke(t *testing.T) {
 		"在做：",
 		"调试 sqlite cache",
 		"~/llm-recall",
-		"sponsored by YCAPI",
+		"YC TECH community",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in card render:\n%s", want, out)
@@ -51,8 +51,8 @@ func TestRenderCardNoPromo(t *testing.T) {
 		// No footer ⇒ --no-promo path.
 	}
 	out := llm.RenderCard(d)
-	if strings.Contains(out, "sponsored") || strings.Contains(out, "YCAPI") {
-		t.Errorf("no-promo card should not include sponsored line:\n%s", out)
+	if strings.Contains(out, "Created within") || strings.Contains(out, "YC TECH") {
+		t.Errorf("no-promo card should not include attribution line:\n%s", out)
 	}
 }
 

@@ -1,47 +1,10 @@
 package promo
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/xiao98/llm-recall/internal/config"
 )
-
-// TestOnboardingStateMachine: not-accepted → write → accepted (+ JSON
-// content has accepted_at + version).
-func TestOnboardingStateMachine(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "onboarding-accepted")
-	SetOnboardingPathForTest(path)
-	t.Cleanup(func() { SetOnboardingPathForTest("") })
-
-	if OnboardingAccepted() {
-		t.Fatalf("fresh tempdir reports accepted=true")
-	}
-	if err := WriteOnboardingAccepted("0.2.0"); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	if !OnboardingAccepted() {
-		t.Fatalf("after write, accepted=false")
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	var rec AcceptedRecord
-	if err := json.Unmarshal(data, &rec); err != nil {
-		t.Fatalf("unmarshal: %v: %s", err, data)
-	}
-	if rec.AcceptedAt == "" {
-		t.Errorf("accepted_at is empty: %s", data)
-	}
-	if rec.Version != "0.2.0" {
-		t.Errorf("version=%q want %q", rec.Version, "0.2.0")
-	}
-}
 
 // TestCTAProbability_Deterministic: monkey-patched rand100Fn drives a
 // known sequence so we can assert exact CTA presence per draw.

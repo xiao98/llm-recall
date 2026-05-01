@@ -20,7 +20,7 @@ func TestStatsFooter_RenderedWhenPromoOn(t *testing.T) {
 	}}
 	m := NewModel(sessions, now, 3).WithPromo(config.Defaults())
 	v := m.View()
-	if !strings.Contains(v, "sponsored by YCAPI") {
+	if !strings.Contains(v, "Created within the YC TECH community") {
 		t.Errorf("default promo: missing sponsored line\n--- view ---\n%s", v)
 	}
 }
@@ -36,7 +36,7 @@ func TestStatsFooter_SuppressedWhenNoPromo(t *testing.T) {
 	cfg := &config.Config{Promo: config.PromoConfig{NoPromo: true}}
 	m := NewModel(sessions, now, 3).WithPromo(cfg)
 	v := m.View()
-	if strings.Contains(v, "sponsored by YCAPI") {
+	if strings.Contains(v, "Created within the YC TECH community") {
 		t.Errorf("--no-promo: sponsored line still rendered\n--- view ---\n%s", v)
 	}
 }
@@ -51,7 +51,7 @@ func TestStatsFooter_SuppressedWhenNilPromo(t *testing.T) {
 	}}
 	m := NewModel(sessions, now, 3) // no WithPromo call
 	v := m.View()
-	if strings.Contains(v, "sponsored by YCAPI") {
+	if strings.Contains(v, "Created within the YC TECH community") {
 		t.Errorf("nil promo: sponsored line still rendered\n--- view ---\n%s", v)
 	}
 }

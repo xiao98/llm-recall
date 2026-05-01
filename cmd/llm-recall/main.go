@@ -1,15 +1,13 @@
 // llm-recall entry point.
 //
-// W6 surface (additions on top of W3/W5):
-//   - `llm-recall onboarding` → re-show the consent screen (idempotent;
-//     overwrites the accepted sentinel on Enter)
-//   - `--no-promo`            → kill switch for banner / search footer /
-//     stats sponsored line; piped through to internal/promo via
-//     internal/config so every subcommand sees the same value
-//
-// On every non-onboarding subcommand we check OnboardingAccepted() and
-// run the consent screen if missing. q exits 0; Enter writes the
-// sentinel and falls through to the requested subcommand.
+// W9 surface (changes vs W6/W7):
+//   - `llm-recall onboarding` removed (popup deleted; first launch goes
+//     directly into the TUI). README now carries the attribution line
+//     instead of an in-app consent box.
+//   - `llm-recall login` added (W9): interactive LLM provider setup
+//     (vendor / api key / base url / model / storage). Key never goes
+//     through CLI flags — only stdin pipe in non-interactive mode.
+//   - `--no-promo` retained (still kills banner / footer / attribution).
 //
 // We hand-route subcommands rather than pull in cobra/viper — the surface
 // is small enough that an explicit switch is clearer than the indirection.
@@ -28,26 +26,22 @@ import (
 	"github.com/xiao98/llm-recall/internal/config"
 	"github.com/xiao98/llm-recall/internal/index"
 	"github.com/xiao98/llm-recall/internal/launcher"
-	"github.com/xiao98/llm-recall/internal/promo"
 	"github.com/xiao98/llm-recall/internal/tui"
 )
 
 // version is overwritten at release time via -ldflags '-X main.version=...'.
-// W6 reads it when writing the onboarding-accepted sentinel so a future
-// privacy-policy bump can detect "user accepted v0.2.0 but we're now
-// v0.5.0" and re-prompt.
 var version = "0.0.1-dev"
 
 // knownSubcommands gates the routing decision in main(). Anything else (or
 // nothing) goes to the TUI command, which is the W3 default.
 var knownSubcommands = map[string]struct{}{
-	"ls":         {},
-	"stats":      {},
-	"version":    {},
-	"help":       {},
-	"onboarding": {}, // W6
-	"card":       {}, // W7
-	"gold":       {}, // W7
+	"ls":      {},
+	"stats":   {},
+	"version": {},
+	"help":    {},
+	"card":    {}, // W7
+	"gold":    {}, // W7
+	"login":   {}, // W9
 }
 
 func main() {
@@ -62,36 +56,25 @@ func main() {
 
 	// Subcommand selection happens on the cleaned args.
 	if len(rawArgs) == 0 {
-		ensureOnboarded(cfg)
 		cmdTUI(nil, cfg)
 		return
 	}
 	first := rawArgs[0]
 	switch first {
 	case "ls":
-		ensureOnboarded(cfg)
 		cmdLs(rawArgs[1:])
 	case "stats":
-		ensureOnboarded(cfg)
 		cmdStats(rawArgs[1:], cfg)
 	case "card":
-		ensureOnboarded(cfg)
 		cmdCard(rawArgs[1:], cfg)
 	case "gold":
-		ensureOnboarded(cfg)
 		cmdGold(rawArgs[1:], cfg)
+	case "login":
+		cmdLogin(rawArgs[1:])
 	case "version", "-v", "--version":
 		fmt.Println("llm-recall", version)
 	case "help", "-h", "--help":
 		usage()
-	case "onboarding":
-		// Explicit re-show: never gated by the sentinel. Enter rewrites,
-		// q leaves the existing sentinel (if any) untouched.
-		if promo.RunOnboarding() {
-			if err := promo.WriteOnboardingAccepted(version); err != nil {
-				fmt.Fprintf(os.Stderr, "warn: write onboarding marker: %v\n", err)
-			}
-		}
 	default:
 		if _, ok := knownSubcommands[first]; ok {
 			usage()
@@ -100,7 +83,6 @@ func main() {
 		// Unknown first arg → assume the user is invoking the TUI with
 		// flags. Anything that turns out to be malformed will surface in
 		// flag.Parse below.
-		ensureOnboarded(cfg)
 		cmdTUI(rawArgs, cfg)
 	}
 }
@@ -123,36 +105,22 @@ func stripNoPromo(args []string) (bool, []string) {
 	return found, out
 }
 
-// ensureOnboarded blocks until the user has accepted the consent screen.
-// Decline (q) exits 0 — the user opted out of the entire program, which
-// is consistent with the privacy promise: no run unless they consent
-// once. Subsequent launches read the sentinel and skip silently.
-func ensureOnboarded(cfg *config.Config) {
-	if promo.OnboardingAccepted() {
-		return
-	}
-	if !promo.RunOnboarding() {
-		os.Exit(0)
-	}
-	if err := promo.WriteOnboardingAccepted(version); err != nil {
-		fmt.Fprintf(os.Stderr, "warn: write onboarding marker: %v\n", err)
-	}
-}
-
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: llm-recall [tui-flags] | ls [...] | stats [...] | onboarding | version")
+	fmt.Fprintln(os.Stderr, "usage: llm-recall [tui-flags] | ls [...] | stats [...] | login [...] | card [...] | gold [...] | version")
 	fmt.Fprintln(os.Stderr, "  (no args)             open TUI search; Enter on a row execs the resume recipe")
 	fmt.Fprintln(os.Stderr, "  --dry-run             print the exec line without spawning the child (for debugging)")
-	fmt.Fprintln(os.Stderr, "  --no-promo            disable banner / search footer / sponsored")
+	fmt.Fprintln(os.Stderr, "  --no-promo            disable banner / search footer / attribution line")
 	fmt.Fprintln(os.Stderr, "  --source <name>       limit to one adapter")
 	fmt.Fprintln(os.Stderr, "  ls [-n N] [--all] [--no-cache] [--source claude|codex|gemini]")
 	fmt.Fprintln(os.Stderr, "                        list LLM CLI sessions on this machine")
-	fmt.Fprintln(os.Stderr, "  stats [--json]        terminal-native stats (heatmap + 4×2 panel)")
+	fmt.Fprintln(os.Stderr, "  stats [--json] [--no-pet]")
+	fmt.Fprintln(os.Stderr, "                        terminal-native stats (heatmap + Top topics + 4×2 panel + pet)")
+	fmt.Fprintln(os.Stderr, "  login [--vendor X] [--base-url X] [--model X] [--use-keyring] [--pipe-key]")
+	fmt.Fprintln(os.Stderr, "                        configure LLM provider (interactive; key never via flag)")
 	fmt.Fprintln(os.Stderr, "  card <session-id> [-y] [--no-cache] [--vendor X] [--model X] [--llm-base-url X]")
 	fmt.Fprintln(os.Stderr, "                        BYOK LLM card render of a single session")
 	fmt.Fprintln(os.Stderr, "  gold [--days N] [-y] [--md] [--no-cache] [--vendor X] [--model X] [--llm-base-url X]")
 	fmt.Fprintln(os.Stderr, "                        BYOK LLM Top-10 quote miner over the last N days")
-	fmt.Fprintln(os.Stderr, "  onboarding            re-show the consent / promo-disclosure screen")
 	fmt.Fprintln(os.Stderr, "  version               print version")
 }
 

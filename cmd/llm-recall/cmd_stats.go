@@ -32,6 +32,7 @@ const tokenFallbackPerMsg = 3
 func cmdStats(args []string, cfg *config.Config) {
 	fs := flag.NewFlagSet("stats", flag.ExitOnError)
 	jsonOut := fs.Bool("json", false, "print JSON snapshot to stdout instead of TUI")
+	noPet := fs.Bool("no-pet", false, "hide the pixel pet (W9; auto-hides below 100 cols regardless)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -70,7 +71,9 @@ func cmdStats(args []string, cfg *config.Config) {
 		os.Exit(1)
 	}
 
-	model := stats.NewModel(sessions, time.Now(), tokenFallbackPerMsg).WithPromo(cfg)
+	model := stats.NewModel(sessions, time.Now(), tokenFallbackPerMsg).
+		WithPromo(cfg).
+		WithNoPet(*noPet)
 
 	if *jsonOut {
 		if err := model.WriteJSON(os.Stdout); err != nil {

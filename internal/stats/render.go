@@ -82,13 +82,20 @@ type Model struct {
 	// computed per-tab, cached after first render.
 	stats map[TabKind]Stats
 
+	// W9: top-N topics across the FULL session set (window-independent).
+	// We don't recompute on tab switch — topics are an "overall" lens.
+	topics []TopicCount
+
 	tab    TabKind
 	width  int
 	height int
 
-	// promo is the W6 marketing config used to render the sponsored
+	// promo is the W6 marketing config used to render the attribution
 	// footer. nil ⇒ no footer (same as --no-promo).
 	promo *config.Config
+
+	// W9: noPet hides the pixel pet entirely (--no-pet flag).
+	noPet bool
 
 	// harness shim; nil in production. Mirrors the W3 TUI pattern.
 	harness *renderHarness
@@ -103,11 +110,20 @@ func NewModel(sessions []adapter.Session, now time.Time, tokenFallback int64) *M
 		tokenFallback: tokenFallback,
 		heatmap:       BuildHeatmap(BuildDailyCounts(sessions, now)),
 		stats:         map[TabKind]Stats{},
+		topics:        TopTopics(sessions, 5),
 		tab:           TabAll,
 		harness:       loadRenderHarness(),
 	}
 	// Warm the all-time stats so the first paint is instant.
 	m.stats[TabAll] = Compute(sessions, now, TabAll.Days(), tokenFallback)
+	return m
+}
+
+// WithNoPet returns the same model with the pixel pet suppressed.
+// Used by the --no-pet CLI flag (extra-minimal stats users) and by
+// the JSON snapshot path.
+func (m *Model) WithNoPet(no bool) *Model {
+	m.noPet = no
 	return m
 }
 
@@ -233,13 +249,46 @@ func (m *Model) effectiveWidth() int {
 }
 
 // View renders the full screen.
+//
+// Layout (W9):
+//
+//	┌─ heatmap ─────────────────────────┐  ┌─ pet ──┐
+//	│ Mon ▒▓⋅⋅⋅…██                       │  │  ghost │
+//	│ Wed ⋅⋅▓██…⋅⋅                       │  │   ASCII │
+//	│ ...                                │  └────────┘
+//	└────────────────────────────────────┘
+//	📚 Top topics:  claude  历史  wiki  quant  feishu
+//	[ All time · Last 7 days · Last 30 days ]
+//	┌─ 4×2 panel ───────────────────────┐
+//	│ ...                                │
+//	└────────────────────────────────────┘
+//	Per source bars …
+//	footer: ←/→ q · attribution
+//
+// Pet renders only when terminal width ≥ 100 cols AND m.noPet is
+// false; below that we collapse back to the W5 vertical layout.
 func (m *Model) View() string {
+	w := m.effectiveWidth()
+	showPet := !m.noPet && w >= 100 && m.heatmap.Cols > 0
+
 	var b strings.Builder
 	b.WriteString("\n")
-	b.WriteString(m.viewHeatmap())
+	if showPet {
+		// Place the heatmap on the left and the pet sprite on the
+		// right, vertically anchored to the top so the heatmap's
+		// month axis stays at the visual top.
+		left := m.viewHeatmap()
+		right := RenderPet(ChooseState(m.stats[m.tab]))
+		row := lipgloss.JoinHorizontal(lipgloss.Top, left, "  ", right)
+		b.WriteString(row)
+	} else {
+		b.WriteString(m.viewHeatmap())
+	}
 	b.WriteString("\n")
 	b.WriteString(m.viewLegend())
 	b.WriteString("\n\n")
+	b.WriteString(m.viewTopics())
+	b.WriteString("\n")
 	b.WriteString(m.viewTabs())
 	b.WriteString("\n\n")
 	b.WriteString(m.viewPanel())
@@ -248,15 +297,28 @@ func (m *Model) View() string {
 	b.WriteString("\n")
 	b.WriteString(colLabel.Render("  ←/→ switch window · 1/2/3 jump · q quit"))
 	b.WriteString("\n")
-	// W6: sponsored footer. promo.StatsFooter returns "" when --no-promo
-	// or when the user has set [promo] no_promo = true in config.toml,
-	// so the line collapses to nothing in that case.
+	// W6/W9: attribution footer. promo.StatsFooter returns "" when
+	// --no-promo or when the user has set [promo] no_promo = true in
+	// config.toml, so the line collapses to nothing in that case.
 	if footer := promo.StatsFooter(m.promo); footer != "" {
 		b.WriteString("\n")
 		b.WriteString(colLabel.Render("  " + footer))
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// viewTopics renders the W9 Top-N topics horizontal row. Empty when
+// no topics were extracted (e.g. fresh install with empty bodies).
+func (m *Model) viewTopics() string {
+	if len(m.topics) == 0 {
+		return ""
+	}
+	parts := []string{colLabel.Render("  📚 Top topics:")}
+	for _, t := range m.topics {
+		parts = append(parts, colValue.Render(t.Token))
+	}
+	return strings.Join(parts, "  ")
 }
 
 // viewHeatmap draws month axis + 7 weekday rows. When the terminal is too

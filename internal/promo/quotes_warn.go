@@ -1,6 +1,6 @@
 // Quotes-source warn shim.
 //
-// W6 §3 fallback says: when WebFetch + WebSearch yield zero usable YCAPI-
+// W6 §3 fallback says: when WebFetch + WebSearch yield zero usable YC TECH-
 // flavored quotes, the binary should emit a one-line stderr warn so the
 // maintainer notices the fallback is in effect. We do this exactly once
 // per process, lazily, on the first Banner() call — a sync.Once around a
@@ -15,7 +15,7 @@ import (
 
 // quotesAreFallback flips to true at compile time if the quotes pool was
 // fully populated from generic sources. We thread it through a const-bool
-// indirection so production toggles to false the moment a real YCAPI
+// indirection so production toggles to false the moment a real YC TECH
 // quote is ever added to quotes.go.
 //
 // W6 reality: every entry in quotes.go is "// generic: ..." → fallback.
@@ -33,7 +33,7 @@ func MaybeWarnFallback() {
 	}
 	warnOnce.Do(func() {
 		fmt.Fprintln(os.Stderr,
-			"warn: 自动抓取 YCAPI 金句失败，已用 30 条通用开发者金句占位。后续可手动编辑 internal/promo/quotes.go。")
+			"warn: 自动抓取 YC TECH 金句失败，已用 30 条通用开发者金句占位。后续可手动编辑 internal/promo/quotes.go。")
 	})
 }
 

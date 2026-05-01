@@ -141,7 +141,7 @@ go build -o llm-recall ./cmd/llm-recall</code></pre>
     <li>stats 纯本地聚合，无网络出口。</li>
     <li>gold / card BYOK：调你自己配的 LLM endpoint，调用前 5 类 PII 正则脱敏 + cost confirm + 7 天缓存。</li>
     <li>无 telemetry，无 crash report，无"匿名统计"——一行也没有。</li>
-    <li>首次启动 onboarding 一次同意流；<code>--no-promo</code> 关全部 sponsored 痕迹。</li>
+    <li>首次启动直接进 TUI；<code>llm-recall login</code> 配 LLM provider；<code>--no-promo</code> 关全部 attribution 痕迹。</li>
   </ul>
 </section>
 
@@ -150,7 +150,7 @@ go build -o llm-recall ./cmd/llm-recall</code></pre>
   <a href="https://github.com/xiao98/llm-recall/releases">Releases</a> ·
   <a href="https://github.com/xiao98/llm-recall/blob/main/CHANGELOG.md">Changelog</a>
   <br>
-  Sponsored by <a href="https://api.youchun.tech">YCAPI</a> · MIT License
+  Created within the <a href="https://recall.youchun.tech">YC TECH</a> community · MIT License
 </footer>
 
 </main>

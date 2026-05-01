@@ -84,16 +84,29 @@ func Resolve(flagVendor, flagModel, flagBaseURL string, cfg *config.Config) (Res
 		out.BaseURL = DefaultBaseURL(out.Vendor)
 	}
 
-	// Step 4: key. Mock mode skips (no real call). Otherwise we read
-	// the matching env var; --vendor anthropic with no ANTHROPIC_API_KEY
-	// is a hard error (not a silent fallback to openai).
+	// Step 4: credential bundle (key + optional base_url / model).
+	// Mock mode skips (no real call). Otherwise we run the W9 chain:
+	// credentials.toml > keyring > env var > error. When the file
+	// supplied base_url / model and the user didn't override on flag
+	// or env, propagate them onto the resolved settings — that's why
+	// CredForVendor returns a Cred and not just a key.
 	if !mockMode() {
-		k, err := KeyForVendor(out.Vendor)
+		c, err := CredForVendor(out.Vendor)
 		if err != nil {
-			// Hint at the right env var.
-			return out, fmt.Errorf("set %s in environment", envForVendor(out.Vendor))
+			return out, ErrNoCredentials
 		}
-		out.Key = k
+		out.Key = c.APIKey
+		// Promote BaseURL / Model from credentials.toml only when the
+		// earlier resolution tier (flag / env / config.toml) didn't
+		// already set something. We compare against the hardcoded
+		// vendor default so a user-set "" in config.toml still loses
+		// to a non-empty credentials.toml entry.
+		if c.BaseURL != "" && (out.BaseURL == "" || out.BaseURL == DefaultBaseURL(out.Vendor)) {
+			out.BaseURL = c.BaseURL
+		}
+		if c.Model != "" && (out.Model == "" || out.Model == DefaultModel(out.Vendor)) {
+			out.Model = c.Model
+		}
 	}
 	return out, nil
 }

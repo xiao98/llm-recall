@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -120,8 +121,8 @@ func cmdGold(args []string, cfg *config.Config) {
 	// Settings.
 	settings, err := llm.Resolve(*flagVendor, *flagModel, *flagBaseURL, cfg)
 	if err != nil {
-		if err.Error() == "no API key in environment" || strings.Contains(err.Error(), "in environment") {
-			fmt.Fprintln(os.Stderr, "error: set ANTHROPIC_API_KEY=sk-ant-... or OPENAI_API_KEY=sk-...")
+		if errors.Is(err, llm.ErrNoCredentials) {
+			fmt.Fprintln(os.Stderr, "error: "+llm.FriendlyNoCredsHint)
 			os.Exit(2)
 		}
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

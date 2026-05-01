@@ -1,6 +1,6 @@
 // Auto-fetched at W6 by subagent.
 //
-// YCAPI-style: 0 (recall.youchun.tech / api.youchun.tech / WebSearch all
+// YC TECH-style: 0 (recall.youchun.tech / api.youchun.tech / WebSearch all
 //   yielded zero usable short-form slogans — pages were either bare
 //   "New API" placeholder or unindexed. See file footer for full URL
 //   trace. Per task §3 fallback policy, all 30 slots are filled with
@@ -11,17 +11,17 @@
 //   Cook / Holub / Beck / Atwood — well-known programming aphorisms,
 //   considered de facto public-domain quotations).
 //
-// 用户审核后可手动替换为更贴切的 YCAPI 群真实金句。
+// 用户审核后可手动替换为更贴切的 YC TECH 群真实金句。
 //
-// Fetch trace (W6, all came back empty for usable YCAPI quotes):
+// Fetch trace (W6, all came back empty for usable YC TECH quotes):
 //   - WebFetch  https://recall.youchun.tech                → ECONNREFUSED
 //   - WebFetch  https://api.youchun.tech                   → "New API" only
 //   - WebFetch  https://api.youchun.tech/about             → empty
 //   - WebSearch site:recall.youchun.tech                   → 0 results
 //   - WebSearch site:youchun.tech                          → 0 results
 //   - WebSearch site:api.youchun.tech                      → 0 results
-//   - WebSearch "YCAPI" 中文 AI                             → unrelated
-//   - WebSearch YCAPI 实战派                                → unrelated
+//   - WebSearch "YC TECH" 中文 AI                             → unrelated
+//   - WebSearch YC TECH 实战派                                → unrelated
 
 package promo
 
