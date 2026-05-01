@@ -1,0 +1,5 @@
+{"type":"permission-mode","permissionMode":"default","sessionId":"abc12345-aaaa-bbbb-cccc-deadbeef0001"}
+{"type":"file-history-snapshot","messageId":"x1","snapshot":{"messageId":"x1","trackedFileBackups":{},"timestamp":"2026-04-08T20:51:36.975Z"},"isSnapshotUpdate":false}
+{"parentUuid":null,"isSidechain":false,"promptId":"pid-1","type":"user","message":{"role":"user","content":"<system-reminder>ignore me</system-reminder>"},"uuid":"u-1","timestamp":"2026-04-08T20:51:30.000Z","cwd":"C:\\Users\\demo\\proj","sessionId":"abc12345-aaaa-bbbb-cccc-deadbeef0001","version":"2.1.96","gitBranch":"main"}
+{"parentUuid":"u-1","isSidechain":false,"promptId":"pid-2","type":"user","message":{"role":"user","content":"帮我写一个排序函数"},"uuid":"u-2","timestamp":"2026-04-08T20:51:36.971Z","cwd":"C:\\Users\\demo\\proj","sessionId":"abc12345-aaaa-bbbb-cccc-deadbeef0001","version":"2.1.96","gitBranch":"main"}
+{"type":"assistant","message":{"role":"assistant","content":"sure"},"uuid":"a-1","timestamp":"2026-04-08T20:51:40.000Z"}

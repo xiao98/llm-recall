@@ -1,0 +1,7 @@
+/llm-recall
+/llm-recall.exe
+*.test
+*.out
+.DS_Store
+.claude/
+
