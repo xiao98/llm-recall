@@ -1,8 +1,0 @@
-.venv/
-__pycache__/
-*.pyc
-*.pyo
-*.png
-!templates/sample_v1.png
-!templates/sample_v2.png
-!templates/sample_v3.png

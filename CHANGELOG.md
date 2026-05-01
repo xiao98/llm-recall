@@ -13,6 +13,9 @@ All notable changes documented here, [Keep a Changelog](https://keepachangelog.c
 - W3: cache schema v2，sessions 表加 `body` 字段（拼接所有用户消息，截断到 64KB）
 - W4: goreleaser 分发流水线（mac/linux/win × amd64/arm64）；Homebrew tap + Scoop bucket 自动发布；GitHub Actions release workflow
 
+### Changed
+- stats: 替换 PNG 生图链路为终端原生渲染（heatmap calendar + 4×2 stats panel，ANSI/Unicode block 字符，参考 `claude /stats` 风格）。Python backend、Pillow 模板、imggen Go 模块、~/Pictures 落盘全部删除。聚合逻辑（token / session / streak）+ TOKEN-AUDIT.md 保留迁至 internal/stats/。
+
 ### Fixed
 - W2: Title 含 `\n` `\r` `\t` 破坏 tabwriter 列对齐 → CleanTitle 清洗
 - W3: Codex 顶部"会话"实为 `<environment_context>` / `[Imported from Claude]` CLI 注入伪用户消息 → 过滤

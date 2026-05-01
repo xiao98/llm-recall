@@ -7,97 +7,89 @@ import (
 	"github.com/xiao98/llm-recall/internal/adapter"
 )
 
-// TestAggregateWindow: only sessions inside the day-window should count.
-func TestAggregateWindow(t *testing.T) {
-	now := time.Now()
+// TestComputeWindow: only sessions inside the day-window should count;
+// all-time bypasses the cutoff.
+func TestComputeWindow(t *testing.T) {
+	// Anchor at a fixed instant so day-bucketing is deterministic.
+	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 	in := []adapter.Session{
 		{Source: "claude", UpdatedAt: now.Add(-2 * 24 * time.Hour), StartedAt: now.Add(-2*24*time.Hour - time.Hour), Body: "hello world\n---\nsecond"},
 		{Source: "codex", UpdatedAt: now.Add(-10 * 24 * time.Hour), StartedAt: now.Add(-11 * 24 * time.Hour), Body: "go test code review\n---\nbug fix"},
 		{Source: "gemini", UpdatedAt: now.Add(-40 * 24 * time.Hour), StartedAt: now.Add(-41 * 24 * time.Hour), Body: "out of window"},
 	}
-	req := Aggregate(in, 30, 5, true)
-	if req.TotalSessions != 2 {
-		t.Errorf("total = %d, want 2", req.TotalSessions)
+
+	got30 := Compute(in, now, 30, 5)
+	if got30.Sessions != 2 {
+		t.Errorf("30d sessions = %d, want 2", got30.Sessions)
 	}
-	if req.PerSource["claude"] != 1 || req.PerSource["codex"] != 1 {
-		t.Errorf("per_source = %v, want claude=1 codex=1", req.PerSource)
+	if got30.WindowDays != 30 {
+		t.Errorf("WindowDays = %d, want 30", got30.WindowDays)
 	}
-	if req.PerSource["gemini"] != 0 {
-		t.Errorf("gemini should be filtered out, got %d", req.PerSource["gemini"])
+
+	gotAll := Compute(in, now, 0, 5)
+	if gotAll.Sessions != 3 {
+		t.Errorf("all-time sessions = %d, want 3", gotAll.Sessions)
 	}
-	if req.WindowDays != 30 {
-		t.Errorf("window_days = %d, want 30", req.WindowDays)
-	}
-	if req.Watermark != true {
-		t.Errorf("watermark passthrough broken")
+	if gotAll.WindowDays != 0 {
+		t.Errorf("WindowDays = %d, want 0", gotAll.WindowDays)
 	}
 }
 
-// TestAggregateMessageFallback: when no token data is available the
-// renderer can still show message counts.
-func TestAggregateMessageFallback(t *testing.T) {
-	now := time.Now()
+// TestComputeMessageFallback: when no token data is available the per-msg
+// estimate kicks in.
+func TestComputeMessageFallback(t *testing.T) {
+	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 	in := []adapter.Session{
 		// 3 messages worth of body via 2 separators.
 		{Source: "claude", UpdatedAt: now, StartedAt: now.Add(-time.Hour), Body: "one\n---\ntwo\n---\nthree"},
 	}
-	req := Aggregate(in, 30, 7, true)
-	if req.TotalMessages != 3 {
-		t.Errorf("total_messages = %d, want 3", req.TotalMessages)
+	got := Compute(in, now, 30, 7)
+	if got.TotalMessages != 3 {
+		t.Errorf("total_messages = %d, want 3", got.TotalMessages)
 	}
-	// File doesn't exist (no FilePath set) so token fallback applies:
-	// 3 messages × 7 = 21.
-	if req.TotalTokens != 21 {
-		t.Errorf("total_tokens = %d, want 21 (fallback 3×7)", req.TotalTokens)
-	}
-}
-
-// TestTopicTokensCJK: Chinese 2-grams should appear; stopword 我/的 must be
-// dropped from the bigram if either rune is a stopword.
-func TestTopicTokensCJK(t *testing.T) {
-	// "项目代码" → 项目, 目代, 代码 (none stopwords).
-	// "我的项目" → 我的 (skip: 我 is stopword), 的项 (skip: 的), 项目 (keep)
-	got := topicTokens("项目代码 我的项目")
-	want := map[string]bool{"项目": true, "目代": true, "代码": true}
-	for _, g := range got {
-		if !want[g] {
-			t.Logf("unexpected bigram in topicTokens(): %q", g)
-		}
-	}
-	hasItem := func(s string) bool {
-		for _, g := range got {
-			if g == s {
-				return true
-			}
-		}
-		return false
-	}
-	if !hasItem("项目") {
-		t.Errorf("expected 项目 in topics, got %v", got)
-	}
-	// 我的, 的项 should both be filtered out.
-	if hasItem("我的") || hasItem("的项") {
-		t.Errorf("stopword bigrams leaked: %v", got)
+	// FilePath empty → tokensFromFile returns 0 → fallback kicks in: 3×7 = 21.
+	if got.TotalTokens != 21 {
+		t.Errorf("total_tokens = %d, want 21 (fallback 3×7)", got.TotalTokens)
 	}
 }
 
-// TestTopNTopics: ties broken lexicographically; singletons dropped.
-func TestTopNTopics(t *testing.T) {
-	counts := map[string]int{
-		"alpha": 5,
-		"beta":  5, // tie with alpha
-		"gamma": 3,
-		"delta": 1, // singleton — dropped
-		"123":   9, // pure digits — dropped
+// TestComputeFavoriteSource: the source with the most sessions wins.
+func TestComputeFavoriteSource(t *testing.T) {
+	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	in := []adapter.Session{
+		{Source: "claude", UpdatedAt: now.Add(-time.Hour)},
+		{Source: "claude", UpdatedAt: now.Add(-2 * time.Hour)},
+		{Source: "codex", UpdatedAt: now.Add(-3 * time.Hour)},
 	}
-	got := topNTopics(counts, 5)
-	want := []string{"alpha", "beta", "gamma"}
-	if len(got) != len(want) {
-		t.Fatalf("len = %d, want %d (got %v)", len(got), len(want), got)
+	got := Compute(in, now, 30, 0)
+	if got.FavoriteSource != "claude" {
+		t.Errorf("FavoriteSource = %q, want claude", got.FavoriteSource)
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("topic[%d] = %q, want %q", i, got[i], want[i])
-		}
+}
+
+// TestComputeLongestSession: max(updated - started).
+func TestComputeLongestSession(t *testing.T) {
+	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	in := []adapter.Session{
+		{Source: "claude", StartedAt: now.Add(-2 * time.Hour), UpdatedAt: now.Add(-time.Hour)},  // 1h
+		{Source: "claude", StartedAt: now.Add(-25 * time.Hour), UpdatedAt: now.Add(-time.Hour)}, // 24h
+		{Source: "claude", StartedAt: now.Add(-time.Minute), UpdatedAt: now.Add(-30 * time.Second)},
+	}
+	got := Compute(in, now, 30, 0)
+	want := 24 * time.Hour
+	if got.LongestSession != want {
+		t.Errorf("LongestSession = %v, want %v", got.LongestSession, want)
+	}
+}
+
+// TestEmpty: zero sessions doesn't panic.
+func TestEmpty(t *testing.T) {
+	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+	got := Compute(nil, now, 30, 0)
+	if got.Sessions != 0 {
+		t.Errorf("empty sessions, got %d", got.Sessions)
+	}
+	if got.FavoriteSource != "" {
+		t.Errorf("empty favorite = %q", got.FavoriteSource)
 	}
 }

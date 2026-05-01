@@ -70,8 +70,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  --source <name>       limit to one adapter")
 	fmt.Fprintln(os.Stderr, "  ls [-n N] [--all] [--no-cache] [--source claude|codex|gemini]")
 	fmt.Fprintln(os.Stderr, "                        list LLM CLI sessions on this machine")
-	fmt.Fprintln(os.Stderr, "  stats [--days N] [--backend URL] [--template v1|v2|v3] [--no-watermark] [--no-open]")
-	fmt.Fprintln(os.Stderr, "                        render two PNG stats cards into ~/Pictures/llm-recall/")
+	fmt.Fprintln(os.Stderr, "  stats [--json]")
+	fmt.Fprintln(os.Stderr, "                        terminal-native stats (heatmap + 4×2 panel); --json for pipes")
 	fmt.Fprintln(os.Stderr, "  version               print version")
 }
 
