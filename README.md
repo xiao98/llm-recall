@@ -40,6 +40,58 @@ llm-recall --no-dry-run       # TUI 选中后真启动子进程进入会话
 
 claude / codex / gemini —— 自动扫 `~/.claude/`、`~/.codex/sessions/`、`~/.gemini/tmp/*/chats/`，无需配置。
 
+## Configuration
+
+`llm-recall` reads an optional `config.toml` from `~/.config/llm-recall/` (macOS / Linux) or `%APPDATA%\llm-recall\` (Windows). Both sections are optional; missing keys fall back to documented defaults.
+
+```toml
+[promo]
+no_promo        = false   # kill switch for banner / search footer / sponsored line
+search_footer   = false   # opt-in TUI list-bottom "discussions" line
+banner_freq     = 1.0     # 0.0–1.0; chance the banner renders on each launch
+cta_probability = 0.05    # 0.0–1.0; chance the banner shows the CTA line
+
+[llm]
+vendor   = ""             # "anthropic" | "openai" | "" (auto-detect from env)
+model    = ""             # "" = vendor default (claude-haiku-4-5-20251001 / gpt-4o-mini)
+base_url = ""             # "" = official endpoint; e.g. "https://dash.youchun.tech/v1" for the YCAPI relay
+```
+
+### LLM (BYOK)
+
+The W7 commands `card` and `gold` call your own LLM API. **Never** put `api_key` / `key` into `config.toml` — `llm-recall` reads keys only from environment variables and warns if it sees one in the TOML file.
+
+| Env var                 | Purpose                                                |
+| ----------------------- | ------------------------------------------------------ |
+| `ANTHROPIC_API_KEY`     | Used when vendor resolves to anthropic (default first) |
+| `OPENAI_API_KEY`        | Used when vendor resolves to openai                    |
+| `LLM_RECALL_BASE_URL`   | Optional escape hatch; overrides `[llm] base_url`      |
+
+**Vendor / model / base URL priority (high → low)**:
+
+1. CLI flag (`--vendor`, `--model`, `--llm-base-url`)
+2. Environment variable (`LLM_RECALL_BASE_URL` for base URL only; vendor is auto-detected from whichever `*_API_KEY` is set, anthropic wins ties)
+3. `config.toml` `[llm]` section
+4. Hardcoded defaults (`anthropic` → `claude-haiku-4-5-20251001`, `openai` → `gpt-4o-mini`)
+
+**Routing through a relay**: set `base_url = "https://dash.youchun.tech/v1"` (or your own gateway). The vendor selection still controls request shape (Anthropic Messages vs OpenAI Chat Completions) — your gateway must speak whichever format matches the vendor you choose.
+
+### Examples
+
+```bash
+# Card a single session (BYOK; defaults to anthropic if ANTHROPIC_API_KEY is set)
+llm-recall card 26348a6c
+
+# Top-10 gold quotes from the last 14 days, OpenAI mini, plain markdown to a file
+llm-recall gold --days 14 --vendor openai --model gpt-4o-mini --md -y > gold.md
+
+# Force a different relay endpoint
+llm-recall gold --llm-base-url https://dash.youchun.tech/v1 -y
+
+# Dry-run cost preview without -y; type 'y' to proceed
+llm-recall card 26348a6c
+```
+
 ## Privacy & Promo
 
 W4 阶段：仅本地读 jsonl，不上传任何对话内容到任何后端。

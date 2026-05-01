@@ -30,6 +30,28 @@ import (
 // to match the TOML layout (so e.g. `[promo] no_promo = true`).
 type Config struct {
 	Promo PromoConfig `toml:"promo"`
+	LLM   LLMConfig   `toml:"llm"`
+}
+
+// LLMConfig governs the W7 BYOK LLM surface. API keys are intentionally
+// NOT a field here — they are read only from environment variables
+// (ANTHROPIC_API_KEY / OPENAI_API_KEY) so a stray `git add config.toml`
+// can never leak credentials. If a user accidentally drops `api_key` /
+// `key` into [llm], Load() warns to stderr and ignores it.
+//
+//   - Vendor: "anthropic" | "openai" | "" (auto-detect from env).
+//   - Model: vendor-specific model id; "" picks the documented default
+//     (claude-haiku-4-5-20251001 for anthropic, gpt-4o-mini for openai).
+//   - BaseURL: optional escape hatch for custom gateways / proxies.
+//     Empty string = official endpoint.
+type LLMConfig struct {
+	Vendor  string `toml:"vendor"`
+	Model   string `toml:"model"`
+	BaseURL string `toml:"base_url"`
+	// APIKey / Key are deliberately undocumented. We read them only to
+	// warn the user that they should NOT live here.
+	APIKey string `toml:"api_key"`
+	Key    string `toml:"key"`
 }
 
 // PromoConfig governs the W6 marketing-injection surface.
@@ -104,6 +126,18 @@ func Load(flagNoPromo bool) (*Config, error) {
 
 	if flagNoPromo {
 		cfg.Promo.NoPromo = true
+	}
+
+	// W7: API keys must never live in config.toml. If the parser pulled
+	// one out, warn loudly and scrub it from the in-memory config so no
+	// downstream code accidentally treats it as authoritative.
+	if cfg.LLM.APIKey != "" || cfg.LLM.Key != "" {
+		fmt.Fprintf(os.Stderr,
+			"warn: %s contains api_key/key under [llm]; ignored. "+
+				"set ANTHROPIC_API_KEY or OPENAI_API_KEY in your environment instead.\n",
+			path)
+		cfg.LLM.APIKey = ""
+		cfg.LLM.Key = ""
 	}
 
 	// Bound the floats. Bad config shouldn't crash the renderer; it

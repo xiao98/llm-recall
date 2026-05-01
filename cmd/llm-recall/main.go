@@ -46,6 +46,8 @@ var knownSubcommands = map[string]struct{}{
 	"version":    {},
 	"help":       {},
 	"onboarding": {}, // W6
+	"card":       {}, // W7
+	"gold":       {}, // W7
 }
 
 func main() {
@@ -72,6 +74,12 @@ func main() {
 	case "stats":
 		ensureOnboarded(cfg)
 		cmdStats(rawArgs[1:], cfg)
+	case "card":
+		ensureOnboarded(cfg)
+		cmdCard(rawArgs[1:], cfg)
+	case "gold":
+		ensureOnboarded(cfg)
+		cmdGold(rawArgs[1:], cfg)
 	case "version", "-v", "--version":
 		fmt.Println("llm-recall", version)
 	case "help", "-h", "--help":
@@ -140,6 +148,10 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  ls [-n N] [--all] [--no-cache] [--source claude|codex|gemini]")
 	fmt.Fprintln(os.Stderr, "                        list LLM CLI sessions on this machine")
 	fmt.Fprintln(os.Stderr, "  stats [--json]        terminal-native stats (heatmap + 4×2 panel)")
+	fmt.Fprintln(os.Stderr, "  card <session-id> [-y] [--no-cache] [--vendor X] [--model X] [--llm-base-url X]")
+	fmt.Fprintln(os.Stderr, "                        BYOK LLM card render of a single session")
+	fmt.Fprintln(os.Stderr, "  gold [--days N] [-y] [--md] [--no-cache] [--vendor X] [--model X] [--llm-base-url X]")
+	fmt.Fprintln(os.Stderr, "                        BYOK LLM Top-10 quote miner over the last N days")
 	fmt.Fprintln(os.Stderr, "  onboarding            re-show the consent / promo-disclosure screen")
 	fmt.Fprintln(os.Stderr, "  version               print version")
 }
