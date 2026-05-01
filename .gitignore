@@ -6,3 +6,10 @@
 .claude/
 dist/
 
+
+# Development planning docs (kept local, not in public repo)
+DEVDOC.md
+TASKS-*.md
+HOTFIX-*.md
+DOGFOOD.md
+launch/
