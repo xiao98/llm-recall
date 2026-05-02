@@ -1,6 +1,8 @@
+**English** | [中文](README.zh-CN.md)
+
 # llm-recall
 
-> 跨厂商 LLM CLI 会话搜索 + 恢复终端工具。fzf 风格，支持 Claude Code / Codex / Gemini CLI；单 Go 二进制、零依赖、无 telemetry。
+> Cross-vendor LLM CLI session search and resume — fzf-style. Claude Code, Codex, Gemini CLI. Single Go binary, zero deps, no telemetry.
 
 [![Release](https://img.shields.io/github/v/release/xiao98/llm-recall)](https://github.com/xiao98/llm-recall/releases)
 [![Go Reference](https://pkg.go.dev/badge/github.com/xiao98/llm-recall.svg)](https://pkg.go.dev/github.com/xiao98/llm-recall)
@@ -10,18 +12,18 @@ Homepage: <https://recall.youchun.tech>
 
 > Created within the YC TECH community: <https://recall.youchun.tech>
 
-营销机制（banner / footer / 加群 CTA）默认开启，详情见 [Privacy & Promo](#privacy--promo) 段；`--no-promo` 一键关闭。
+Promo (banner / footer / community CTA) is on by default — see [Privacy & Promo](#privacy--promo); `--no-promo` disables everything.
 
 <!-- screenshot: docs/screenshots/tui.gif | 录制脚本见 launch/storyboard.md §2 TUI search -->
 
 ## What it does
 
-同时在用 Claude Code / Codex / Gemini 的开发者，三家会话散落在三处目录、三套 CLI、三个 `--resume` 语义，搜索历史只能各家 CLI 各搜一遍。`llm-recall` 把三家 jsonl 会话拉到一个本地 SQLite 索引里：
+If you use Claude Code, Codex, and Gemini side by side, your sessions live in three different directories under three different CLIs with three different `--resume` semantics. Searching history means searching each one separately. `llm-recall` indexes all three jsonl stores into one local SQLite cache:
 
-- **TUI 实时模糊搜索**：输入即筛，多关键词 AND，中文按 unicode 字处理
-- **回车直接 resume**：自动 `cd` 到原 cwd，调对应 CLI 的 `--resume`（Gemini 退化交互式）
-- **终端原生 stats / gold / card**：lipgloss 渲染，截屏即传播，无 PNG 后端
-- **BYOK**：`gold` / `card` 调用你自己的 LLM key，对话内容**不**经任何中转
+- **Live fuzzy TUI search** — type to filter, multi-keyword AND, CJK-aware
+- **Enter to resume** — auto-`cd` back to the original cwd, then dispatch the right CLI's `--resume` (Gemini falls back to interactive)
+- **Terminal-native stats / gold / card** — lipgloss rendering, screenshot-friendly, no PNG backend
+- **BYOK** — `gold` / `card` use your own LLM key; conversation content never goes through any relay
 
 ## Install
 
@@ -38,7 +40,7 @@ scoop bucket add xiao98 https://github.com/xiao98/scoop-bucket
 scoop install llm-recall
 ```
 
-### Go install (任何平台)
+### Go install (any platform)
 
 ```bash
 go install github.com/xiao98/llm-recall/cmd/llm-recall@latest
@@ -51,64 +53,64 @@ git clone https://github.com/xiao98/llm-recall && cd llm-recall
 go build -o llm-recall ./cmd/llm-recall
 ```
 
-首次启动直接进 TUI；如需用 `gold` / `card` 调用 LLM，先跑 `llm-recall login` 配置 provider（API key 落 `~/.config/llm-recall/credentials.toml`，chmod 600；可选 `--use-keyring` 入系统钥匙串）。
+First launch goes straight into the TUI. To use `gold` / `card` (LLM-powered), run `llm-recall login` once to set up your provider (API key lands in `~/.config/llm-recall/credentials.toml`, chmod 600; opt-in `--use-keyring` stores it in the OS keyring instead).
 
 ## Usage
 
-### TUI 模糊搜索（默认）
+### Fuzzy search TUI (default)
 
 ```bash
-llm-recall                    # 默认：选中后真起子进程进入对应 CLI 会话
-llm-recall --dry-run          # 调试模式：选中只打印 resume 命令不真起子进程
-llm-recall --source codex     # 只搜 codex 会话
+llm-recall                    # default: pick a row → spawn the matching CLI in the original cwd
+llm-recall --dry-run          # debug: print the resume command instead of executing
+llm-recall --source codex     # restrict to one adapter
 ```
 
 <!-- screenshot: docs/screenshots/tui.gif | 录制脚本见 launch/storyboard.md §2 TUI search -->
 
-输入框 → 列表实时筛选 → ↑↓ 选中 → 右侧预览原文 + 命中片段高亮 → Enter resume。
+Type to filter → arrow keys to select → preview pane on the right with hit highlights → Enter to resume.
 
 ### Stats heatmap
 
 ```bash
-llm-recall stats              # GitHub-style 7-row 贡献日历 + 4×2 stats 面板
-llm-recall stats --json       # 给 pipe 用
+llm-recall stats              # GitHub-style 7-row contribution calendar + 4×2 stats panel
+llm-recall stats --json       # pipe-friendly snapshot
 ```
 
 <!-- screenshot: docs/screenshots/stats.gif | 录制脚本见 launch/storyboard.md §1 stats -->
 
-`1/2/3` 切 All time / Last 7 days / Last 30 days，`q` 退出。终端原生渲染（`⋅ ▒ ▓ █` 四档），lipgloss 24-bit 色，截屏直接发朋友圈。
+`1/2/3` switches All time / Last 7 days / Last 30 days, `q` quits. Terminal-native rendering (`⋅ ▒ ▓ █` four levels), lipgloss truecolor — screenshot it directly.
 
-### Gold（LLM 抽 Top 10 金句）
+### Gold (LLM mines your Top 10 quotes)
 
 ```bash
-llm-recall gold                       # 默认扫 7 天，BYOK
-llm-recall gold --days 30 -y          # 30 天，跳 cost 确认
-llm-recall gold --md > gold.md        # 输出纯 markdown，pipe 友好
+llm-recall gold                       # last 7 days, BYOK
+llm-recall gold --days 30 -y          # 30 days, skip cost confirm
+llm-recall gold --md > gold.md        # plain markdown, pipe-friendly
 llm-recall gold --vendor openai --model gpt-4o-mini
 ```
 
 <!-- screenshot: docs/screenshots/gold.gif | 录制脚本见 launch/storyboard.md §3 gold -->
 
-单次 LLM 调用挑出你说过的 Top 10 金句 + 一句话点评。total > 100KB 自动 sample 50 会话。结果落 `~/.cache/llm-recall/llm-cache/`，7 天 TTL，`--no-cache` 强刷。Prompt 模板：[`internal/llm/prompts/gold.go`](internal/llm/prompts/gold.go)。
+A single LLM call surfaces your top 10 most quotable lines plus a one-sentence comment each. > 100KB total auto-samples down to 50 sessions. Results cached at `~/.cache/llm-recall/llm-cache/`, 7-day TTL, `--no-cache` forces a refresh. Prompt template: [`internal/llm/prompts/gold.go`](internal/llm/prompts/gold.go).
 
-### Card（单会话名片）
+### Card (single-session card)
 
 ```bash
-llm-recall card 26348a6c              # 短 id 前缀模糊匹配
-llm-recall card 26348a6c -y           # 跳 cost 确认
+llm-recall card 26348a6c              # short id prefix-matches
+llm-recall card 26348a6c -y           # skip cost confirm
 llm-recall card 26348a6c --no-cache
 ```
 
 <!-- screenshot: docs/screenshots/card.gif | 录制脚本见 launch/storyboard.md §4 card -->
 
-lipgloss 圆角卡片：会话头 + 首条用户消息（截 200 字）+ LLM 一句话总结（≤50 字）+ cwd。Prompt 模板：[`internal/llm/prompts/card.go`](internal/llm/prompts/card.go)。
+A lipgloss rounded card: session header + first user message (truncated to 200 chars) + LLM one-sentence summary (≤50 chars) + cwd. Prompt template: [`internal/llm/prompts/card.go`](internal/llm/prompts/card.go).
 
-### List（CLI dump）
+### List (CLI dump)
 
 ```bash
-llm-recall ls --all                   # 三家全列
+llm-recall ls --all                   # all three sources
 llm-recall ls --source claude -n 20
-llm-recall ls --no-cache              # 强刷索引
+llm-recall ls --no-cache              # rebuild the index
 ```
 
 ## Configuration
@@ -183,39 +185,38 @@ CWD resolution per source:
 
 ## Privacy & Promo
 
-llm-recall 默认对你机器之外的世界**完全静默**，唯一例外是 BYOK 模式下你自己显式触发的 LLM 调用（去你自己配的 endpoint）。
+llm-recall is **completely silent** to the world outside your machine — the only exception is BYOK LLM calls you explicitly trigger (which go to whichever endpoint you configured).
 
-**营销注入说明**（W9 起；启动直接进 TUI，无弹窗）：
+**Marketing surfaces** (W9 onwards; first launch goes straight to TUI, no popup):
 
-- 启动时 TUI 顶栏一条金句 banner，5% 概率含加群链接（`https://recall.youchun.tech`）
-- stats / card / gold 底部一行 attribution（`Created within the YC TECH community`）
-- （可选）搜索结果底部讨论关联条
-- gold / card 用你自己的 LLM API key，不走任何中转网关
+- TUI startup banner with one quote, 5% chance of a community-link CTA line (`https://recall.youchun.tech`)
+- One-line attribution at the bottom of stats / card / gold (`Created within the YC TECH community`)
+- (optional) discussion-link line at the bottom of search results
+- gold / card use your own LLM API key; no relay gateway is involved
 
-**不上传任何对话内容**：
+**No conversation content is ever uploaded**:
 
-- 索引：本地 SQLite，落系统 cache 目录（macOS `~/Library/Caches/llm-recall/`、Linux `~/.cache/llm-recall/`、Windows `%LOCALAPPDATA%\llm-recall\Cache\`）
-- stats：纯本地聚合，无任何网络出口
-- gold / card：调你自己配的 LLM endpoint（默认 Anthropic / OpenAI 官方），调用前 5 类 PII 正则脱敏（API key / OAuth token / email / 手机号 / IPv4）+ token / cost 估算 confirm（`-y` 跳过）+ 7 天结果缓存
-- 无 telemetry，无 crash report，无"匿名使用统计"——一行也没有
+- Index: local SQLite under the system cache dir (macOS `~/Library/Caches/llm-recall/`, Linux `~/.cache/llm-recall/`, Windows `%LOCALAPPDATA%\llm-recall\Cache\`)
+- stats: pure local aggregation, no network egress
+- gold / card: hits the LLM endpoint you configured (default Anthropic / OpenAI official); 5 PII regex classes are redacted client-side before the call (API key / OAuth token / email / phone / IPv4); cost estimate prompts for confirm (`-y` skips); 7-day result cache
+- No telemetry, no crash reports, no "anonymous usage statistics" — not a single line
 
-**关 promo 的所有方式**：
+**Disabling promo**:
 
 ```bash
-llm-recall --no-promo                     # 单次
-echo 'no_promo = true' >> ~/.config/llm-recall/config.toml   # 永久（写到 [promo] 段下）
-llm-recall stats --no-pet                 # 单独关闭 stats 像素宠物
+llm-recall --no-promo                                        # one-off
+echo 'no_promo = true' >> ~/.config/llm-recall/config.toml   # permanent (write into [promo])
 ```
 
-`--no-promo` 关 banner / search footer / stats attribution line / gold & card footer 全套，一刀切。`--no-pet` 只关 stats 右上角的像素宠物（终端宽度 < 100 列也会自动隐藏）。
+`--no-promo` kills banner / search footer / stats attribution / gold & card footer in one shot.
 
 ## Contributing
 
-欢迎 issue / PR。
+Issues and PRs welcome.
 
-- **Bug report**：请贴 `llm-recall version` 输出 + 复现步骤 + 相关 jsonl 文件头 5 行（脱敏后）
-- **PR 流程**：fork → branch → `go test ./... && go vet ./... && gofmt -l .` 全过 → PR；CI 跑 macOS / Linux / Windows × Go 1.22+
-- **新 source adapter**：实现 `internal/adapter.SessionAdapter` + 可选 `FileLister` / `FileParser` 增量子接口（详见 [DEVDOC.md §2.1](DEVDOC.md)），开 PR 时附该家 jsonl 头部 schema 样本（脱敏）+ resume 命令实测
+- **Bug reports**: include `llm-recall version` output + reproduction steps + the first 5 lines of the relevant jsonl (redacted)
+- **PR flow**: fork → branch → `go test ./... && go vet ./... && gofmt -l .` clean → PR; CI runs macOS / Linux / Windows × Go 1.22+
+- **New source adapter**: implement `internal/adapter.SessionAdapter` + optional `FileLister` / `FileParser` incremental sub-interfaces (see [DEVDOC.md §2.1](DEVDOC.md)); attach a redacted jsonl header sample + resume command verification when opening the PR
 
 ## License
 
@@ -223,9 +224,9 @@ MIT — see [LICENSE](LICENSE).
 
 ## Acknowledgements
 
-- [charmbracelet/bubbletea](https://github.com/charmbracelet/bubbletea) / [bubbles](https://github.com/charmbracelet/bubbles) / [lipgloss](https://github.com/charmbracelet/lipgloss) — TUI 全家桶
-- [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) — 纯 Go SQLite，单二进制无 cgo
-- [BurntSushi/toml](https://github.com/BurntSushi/toml) — config.toml 解析
-- [sahilm/fuzzy](https://github.com/sahilm/fuzzy) — 模糊匹配
-- [mattn/go-runewidth](https://github.com/mattn/go-runewidth) — CJK runewidth 对齐
+- [charmbracelet/bubbletea](https://github.com/charmbracelet/bubbletea) / [bubbles](https://github.com/charmbracelet/bubbles) / [lipgloss](https://github.com/charmbracelet/lipgloss) — TUI stack
+- [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) — pure-Go SQLite, single binary, no cgo
+- [BurntSushi/toml](https://github.com/BurntSushi/toml) — config.toml parser
+- [sahilm/fuzzy](https://github.com/sahilm/fuzzy) — fuzzy matching
+- [mattn/go-runewidth](https://github.com/mattn/go-runewidth) — CJK runewidth alignment
 - Created within the [YC TECH](https://recall.youchun.tech) community

@@ -7,7 +7,7 @@ All notable changes documented here, [Keep a Changelog](https://keepachangelog.c
 ### Added
 - W9: `llm-recall login` 交互式 LLM provider 配置（vendor / api key / base url / model / storage）。Key 走 `golang.org/x/term.ReadPassword` 隐藏输入或 stdin pipe，**永远不进 CLI flag**（shell history 风险）。默认落 `~/.config/llm-recall/credentials.toml` chmod 600；`--use-keyring` 改入系统钥匙串（macOS Keychain / Win Credential Manager / Linux Secret Service via `zalando/go-keyring`）。
 - W9: stats 顶部加一行 `📚 Top topics: ...`，5 个 EN/ZH 关键词（去停用词，brand name 自动过滤）；`stats --json` 输出含 `top_topics` 字段。
-- W9: stats 右上角加 16×16 像素小幽灵（lipgloss + unicode block + 24-bit RGB），按活跃数据切 7 个表情：`Idle / Happy / Pumped / Sad / Sleeping / Confused / Cheering`。终端 ≥ 100 列时与 heatmap 横向并排；< 100 列自动隐藏；`--no-pet` 强制关闭。
+- W9: README 中英双版（英文 `README.md` + 中文 `README.zh-CN.md`，顶部互切语言开关）。
 
 ### Changed
 - **Rebrand**: `YCAPI` → `YC TECH`，`ycapi` → `yctech`（README / landing `docs/index.html` / 启动 banner / search footer / stats footer 全套）。**真实服务地址 `api.youchun.tech` / `dash.youchun.tech` 不变**（rebrand 仅作用于品牌名字面量）。
@@ -20,7 +20,6 @@ All notable changes documented here, [Keep a Changelog](https://keepachangelog.c
 - W9: `credentials.Save` 写新 vendor 段不会清掉另一 vendor 的现有段（atomic temp-file rename + 0600）。
 
 ### Known limitations
-- 像素宠物当前为静态渲染，不做帧动画（lipgloss 单帧足够，动画会持续占用刷新成本）。
 - Top 5 话题用简单 bigram 切 CJK，无 jieba/MeCab 级分词；少数情况会切出无意义 bigram。停用词表可在 `internal/stats/stopwords.go` 加。
 - `--use-keyring` 在无图形会话的 Linux server（无 Secret Service）会自动降级到 credentials.toml + stderr warn。
 

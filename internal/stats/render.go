@@ -94,9 +94,6 @@ type Model struct {
 	// footer. nil ⇒ no footer (same as --no-promo).
 	promo *config.Config
 
-	// W9: noPet hides the pixel pet entirely (--no-pet flag).
-	noPet bool
-
 	// harness shim; nil in production. Mirrors the W3 TUI pattern.
 	harness *renderHarness
 }
@@ -116,14 +113,6 @@ func NewModel(sessions []adapter.Session, now time.Time, tokenFallback int64) *M
 	}
 	// Warm the all-time stats so the first paint is instant.
 	m.stats[TabAll] = Compute(sessions, now, TabAll.Days(), tokenFallback)
-	return m
-}
-
-// WithNoPet returns the same model with the pixel pet suppressed.
-// Used by the --no-pet CLI flag (extra-minimal stats users) and by
-// the JSON snapshot path.
-func (m *Model) WithNoPet(no bool) *Model {
-	m.noPet = no
 	return m
 }
 
@@ -252,10 +241,10 @@ func (m *Model) effectiveWidth() int {
 //
 // Layout (W9):
 //
-//	┌─ heatmap ─────────────────────────┐  ┌─ pet ──┐
-//	│ Mon ▒▓⋅⋅⋅…██                       │  │  ghost │
-//	│ Wed ⋅⋅▓██…⋅⋅                       │  │   ASCII │
-//	│ ...                                │  └────────┘
+//	┌─ heatmap ─────────────────────────┐
+//	│ Mon ▒▓⋅⋅⋅…██                       │
+//	│ Wed ⋅⋅▓██…⋅⋅                       │
+//	│ ...                                │
 //	└────────────────────────────────────┘
 //	📚 Top topics:  claude  历史  wiki  quant  feishu
 //	[ All time · Last 7 days · Last 30 days ]
@@ -264,26 +253,10 @@ func (m *Model) effectiveWidth() int {
 //	└────────────────────────────────────┘
 //	Per source bars …
 //	footer: ←/→ q · attribution
-//
-// Pet renders only when terminal width ≥ 100 cols AND m.noPet is
-// false; below that we collapse back to the W5 vertical layout.
 func (m *Model) View() string {
-	w := m.effectiveWidth()
-	showPet := !m.noPet && w >= 100 && m.heatmap.Cols > 0
-
 	var b strings.Builder
 	b.WriteString("\n")
-	if showPet {
-		// Place the heatmap on the left and the pet sprite on the
-		// right, vertically anchored to the top so the heatmap's
-		// month axis stays at the visual top.
-		left := m.viewHeatmap()
-		right := RenderPet(ChooseState(m.stats[m.tab]))
-		row := lipgloss.JoinHorizontal(lipgloss.Top, left, "  ", right)
-		b.WriteString(row)
-	} else {
-		b.WriteString(m.viewHeatmap())
-	}
+	b.WriteString(m.viewHeatmap())
 	b.WriteString("\n")
 	b.WriteString(m.viewLegend())
 	b.WriteString("\n\n")
